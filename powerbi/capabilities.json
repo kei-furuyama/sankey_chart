@@ -133,6 +133,16 @@
   "privileges": [],
   "supportsHighlight": true,
   "supportsMultiVisualSelection": true,
+  "supportsKeyboardFocus": true,
+  "supportsLandingPage": true,
+  "tooltips": {
+    "supportedTypes": {
+      "default": true,
+      "canvas": true
+    },
+    "roles": ["tooltips"],
+    "supportEnhancedTooltips": true
+  },
   "sorting": {
     "default": {}
   }

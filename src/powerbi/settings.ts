@@ -209,42 +209,43 @@ interface FormattingSlice {
 // Parse Settings from DataView
 // =============================================================================
 
+function extractColor(obj: any, key: string, fallback: string): string {
+  return obj?.[key]?.solid?.color ?? fallback;
+}
+
 /**
  * DataViewから設定を解析
  */
 export function parseSettings(dataView: any): VisualSettings {
   const settings = new VisualSettings();
+  const objects = dataView?.metadata?.objects;
 
-  if (!dataView?.metadata?.objects) {
+  if (!objects) {
     return settings;
   }
 
-  const objects = dataView.metadata.objects;
+  const { nodeSettings: node, linkSettings: link, labelSettings: label, animationSettings: animation } = objects;
 
-  // Node settings
-  if (objects.nodeSettings) {
-    settings.nodeSettings.width = objects.nodeSettings.width ?? settings.nodeSettings.width;
-    settings.nodeSettings.padding = objects.nodeSettings.padding ?? settings.nodeSettings.padding;
-    settings.nodeSettings.defaultColor = objects.nodeSettings.defaultColor?.solid?.color ?? settings.nodeSettings.defaultColor;
+  if (node) {
+    settings.nodeSettings.width = node.width ?? settings.nodeSettings.width;
+    settings.nodeSettings.padding = node.padding ?? settings.nodeSettings.padding;
+    settings.nodeSettings.defaultColor = extractColor(node, 'defaultColor', settings.nodeSettings.defaultColor);
   }
 
-  // Link settings
-  if (objects.linkSettings) {
-    settings.linkSettings.colorMode = objects.linkSettings.colorMode ?? settings.linkSettings.colorMode;
-    settings.linkSettings.opacity = objects.linkSettings.opacity ?? settings.linkSettings.opacity;
+  if (link) {
+    settings.linkSettings.colorMode = link.colorMode ?? settings.linkSettings.colorMode;
+    settings.linkSettings.opacity = link.opacity ?? settings.linkSettings.opacity;
   }
 
-  // Label settings
-  if (objects.labelSettings) {
-    settings.labelSettings.show = objects.labelSettings.show ?? settings.labelSettings.show;
-    settings.labelSettings.fontSize = objects.labelSettings.fontSize ?? settings.labelSettings.fontSize;
-    settings.labelSettings.color = objects.labelSettings.color?.solid?.color ?? settings.labelSettings.color;
+  if (label) {
+    settings.labelSettings.show = label.show ?? settings.labelSettings.show;
+    settings.labelSettings.fontSize = label.fontSize ?? settings.labelSettings.fontSize;
+    settings.labelSettings.color = extractColor(label, 'color', settings.labelSettings.color);
   }
 
-  // Animation settings
-  if (objects.animationSettings) {
-    settings.animationSettings.enabled = objects.animationSettings.enabled ?? settings.animationSettings.enabled;
-    settings.animationSettings.duration = objects.animationSettings.duration ?? settings.animationSettings.duration;
+  if (animation) {
+    settings.animationSettings.enabled = animation.enabled ?? settings.animationSettings.enabled;
+    settings.animationSettings.duration = animation.duration ?? settings.animationSettings.duration;
   }
 
   return settings;

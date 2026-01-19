@@ -326,58 +326,53 @@ function createMetadata(dataView: PowerBIDataViewSimple): DatasetMetadata {
 // リンク重複集計
 // ============================================================
 
+type AggregationMethod = 'sum' | 'average' | 'max' | 'min';
+
+function computeAggregatedValue(values: number[], method: AggregationMethod): number {
+  if (method === 'sum') return values.reduce((a, b) => a + b, 0);
+  if (method === 'average') return values.reduce((a, b) => a + b, 0) / values.length;
+  if (method === 'max') return Math.max(...values);
+  return Math.min(...values);
+}
+
 /**
  * 同じsource-targetの組み合わせを持つリンクを集計
  */
 export function aggregateLinks(
   links: PowerBISankeyLink[],
-  method: 'sum' | 'average' | 'max' | 'min' = 'sum'
+  method: AggregationMethod = 'sum'
 ): PowerBISankeyLink[] {
   const linkMap = new Map<string, PowerBISankeyLink[]>();
 
-  links.forEach((link) => {
+  for (const link of links) {
     const key = `${link.source}|${link.target}`;
-    const group = linkMap.get(key) || [];
-    group.push(link);
-    linkMap.set(key, group);
-  });
+    const group = linkMap.get(key);
+    if (group) {
+      group.push(link);
+    } else {
+      linkMap.set(key, [link]);
+    }
+  }
 
   const aggregated: PowerBISankeyLink[] = [];
 
-  linkMap.forEach((group) => {
+  for (const group of linkMap.values()) {
     if (group.length === 1) {
       aggregated.push(group[0]);
-      return;
+      continue;
     }
 
     const values = group.map((l) => l.value);
-    let aggregatedValue: number;
-
-    switch (method) {
-      case 'sum':
-        aggregatedValue = values.reduce((a, b) => a + b, 0);
-        break;
-      case 'average':
-        aggregatedValue = values.reduce((a, b) => a + b, 0) / values.length;
-        break;
-      case 'max':
-        aggregatedValue = Math.max(...values);
-        break;
-      case 'min':
-        aggregatedValue = Math.min(...values);
-        break;
-    }
-
     aggregated.push({
       ...group[0],
-      value: aggregatedValue,
+      value: computeAggregatedValue(values, method),
       metadata: {
         ...group[0].metadata,
         aggregatedFrom: group.length,
         originalValues: values,
       },
     });
-  });
+  }
 
   return aggregated;
 }
@@ -504,8 +499,3 @@ export function collectSelectionIds(
     .filter((id): id is PowerBISelectionId => id !== undefined);
 }
 
-// ============================================================
-// エクスポート
-// ============================================================
-
-export type { DataViewConverterOptions };
