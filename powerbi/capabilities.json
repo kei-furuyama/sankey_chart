@@ -1,0 +1,139 @@
+{
+  "dataRoles": [
+    {
+      "name": "source",
+      "kind": "Grouping",
+      "displayName": "Source",
+      "displayNameKey": "Visual_Source",
+      "description": "Source node for the flow"
+    },
+    {
+      "name": "target",
+      "kind": "Grouping",
+      "displayName": "Target",
+      "displayNameKey": "Visual_Target",
+      "description": "Target node for the flow"
+    },
+    {
+      "name": "value",
+      "kind": "Measure",
+      "displayName": "Value",
+      "displayNameKey": "Visual_Value",
+      "description": "Flow value between source and target"
+    }
+  ],
+  "dataViewMappings": [
+    {
+      "conditions": [
+        {
+          "source": { "max": 1 },
+          "target": { "max": 1 },
+          "value": { "max": 1 }
+        }
+      ],
+      "categorical": {
+        "categories": {
+          "select": [
+            { "for": { "in": "source" } },
+            { "for": { "in": "target" } }
+          ],
+          "dataReductionAlgorithm": { "top": { "count": 10000 } }
+        },
+        "values": {
+          "select": [
+            { "bind": { "to": "value" } }
+          ]
+        }
+      }
+    }
+  ],
+  "objects": {
+    "nodeSettings": {
+      "displayName": "Nodes",
+      "displayNameKey": "Visual_Nodes",
+      "properties": {
+        "width": {
+          "displayName": "Node Width",
+          "displayNameKey": "Visual_NodeWidth",
+          "type": { "numeric": true }
+        },
+        "padding": {
+          "displayName": "Node Padding",
+          "displayNameKey": "Visual_NodePadding",
+          "type": { "numeric": true }
+        },
+        "defaultColor": {
+          "displayName": "Default Color",
+          "displayNameKey": "Visual_DefaultColor",
+          "type": { "fill": { "solid": { "color": true } } }
+        }
+      }
+    },
+    "linkSettings": {
+      "displayName": "Links",
+      "displayNameKey": "Visual_Links",
+      "properties": {
+        "colorMode": {
+          "displayName": "Color Mode",
+          "displayNameKey": "Visual_ColorMode",
+          "type": {
+            "enumeration": [
+              { "value": "source", "displayName": "Source" },
+              { "value": "target", "displayName": "Target" },
+              { "value": "gradient", "displayName": "Gradient" },
+              { "value": "fixed", "displayName": "Fixed" }
+            ]
+          }
+        },
+        "opacity": {
+          "displayName": "Opacity (%)",
+          "displayNameKey": "Visual_Opacity",
+          "type": { "numeric": true }
+        }
+      }
+    },
+    "labelSettings": {
+      "displayName": "Labels",
+      "displayNameKey": "Visual_Labels",
+      "properties": {
+        "show": {
+          "displayName": "Show Labels",
+          "displayNameKey": "Visual_ShowLabels",
+          "type": { "bool": true }
+        },
+        "fontSize": {
+          "displayName": "Font Size",
+          "displayNameKey": "Visual_FontSize",
+          "type": { "numeric": true }
+        },
+        "color": {
+          "displayName": "Color",
+          "displayNameKey": "Visual_LabelColor",
+          "type": { "fill": { "solid": { "color": true } } }
+        }
+      }
+    },
+    "animationSettings": {
+      "displayName": "Animation",
+      "displayNameKey": "Visual_Animation",
+      "properties": {
+        "enabled": {
+          "displayName": "Enable Animation",
+          "displayNameKey": "Visual_EnableAnimation",
+          "type": { "bool": true }
+        },
+        "duration": {
+          "displayName": "Duration (ms)",
+          "displayNameKey": "Visual_Duration",
+          "type": { "numeric": true }
+        }
+      }
+    }
+  },
+  "privileges": [],
+  "supportsHighlight": true,
+  "supportsMultiVisualSelection": true,
+  "sorting": {
+    "default": {}
+  }
+}

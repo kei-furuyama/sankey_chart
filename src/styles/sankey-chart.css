@@ -1,0 +1,550 @@
+/**
+ * Sankey Chart Styles
+ *
+ * 包括的なスタイルシート - デザイントークンに基づく
+ */
+
+/* =============================================================================
+   1. ベーススタイル
+   ============================================================================= */
+
+.sankey-chart {
+  font-family: var(--sankey-font-family);
+  background-color: var(--sankey-bg-primary);
+  color: var(--sankey-text-primary);
+  position: relative;
+  overflow: hidden;
+}
+
+.sankey-chart svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* =============================================================================
+   2. ノードスタイル
+   ============================================================================= */
+
+.sankey-node {
+  cursor: pointer;
+  transition:
+    opacity var(--sankey-duration-fast) var(--sankey-easing-default),
+    filter var(--sankey-duration-fast) var(--sankey-easing-default);
+}
+
+.sankey-node rect {
+  rx: var(--sankey-node-border-radius);
+  ry: var(--sankey-node-border-radius);
+  stroke: transparent;
+  stroke-width: 0;
+  transition:
+    stroke var(--sankey-duration-fast) var(--sankey-easing-default),
+    stroke-width var(--sankey-duration-fast) var(--sankey-easing-default),
+    filter var(--sankey-duration-fast) var(--sankey-easing-default);
+}
+
+/* ホバー状態 */
+.sankey-node:hover rect {
+  stroke: currentColor;
+  stroke-width: 2px;
+  filter: brightness(1.1);
+}
+
+/* 選択状態 */
+.sankey-node.selected rect {
+  stroke: var(--sankey-focus-ring);
+  stroke-width: 3px;
+}
+
+/* 強調状態（関連フローがハイライトされている時） */
+.sankey-node.highlighted rect {
+  filter: brightness(1.15);
+}
+
+/* 薄暗い状態（他の要素がハイライトされている時） */
+.sankey-node.dimmed {
+  opacity: 0.3;
+}
+
+/* 無効状態 */
+.sankey-node.disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* フォーカス状態（キーボードナビゲーション） */
+.sankey-node:focus {
+  outline: none;
+}
+
+.sankey-node:focus-visible rect {
+  outline: 2px solid var(--sankey-focus-ring);
+  outline-offset: 2px;
+}
+
+/* =============================================================================
+   3. リンク（フロー）スタイル
+   ============================================================================= */
+
+.sankey-link {
+  fill: none;
+  stroke-opacity: 0.5;
+  transition:
+    stroke-opacity var(--sankey-duration-fast) var(--sankey-easing-default),
+    stroke var(--sankey-duration-fast) var(--sankey-easing-default);
+}
+
+/* グラデーション対応のリンク */
+.sankey-link.gradient {
+  stroke: url(#sankey-link-gradient);
+}
+
+/* ホバー状態 */
+.sankey-link:hover {
+  stroke-opacity: 0.8;
+  cursor: pointer;
+}
+
+/* 選択状態 */
+.sankey-link.selected {
+  stroke-opacity: 1;
+}
+
+/* 強調状態 */
+.sankey-link.highlighted {
+  stroke-opacity: 0.9;
+}
+
+/* 薄暗い状態 */
+.sankey-link.dimmed {
+  stroke-opacity: 0.1;
+}
+
+/* フォーカス状態 */
+.sankey-link:focus {
+  outline: none;
+}
+
+.sankey-link:focus-visible {
+  stroke-opacity: 0.9;
+  filter: drop-shadow(0 0 3px var(--sankey-focus-ring));
+}
+
+/* =============================================================================
+   4. ラベルスタイル
+   ============================================================================= */
+
+.sankey-label {
+  font-size: var(--sankey-font-size-sm);
+  fill: var(--sankey-text-primary);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 左側のノードラベル（右寄せ） */
+.sankey-label.label-left {
+  text-anchor: end;
+}
+
+/* 右側のノードラベル（左寄せ） */
+.sankey-label.label-right {
+  text-anchor: start;
+}
+
+/* ノード内ラベル（中央寄せ） */
+.sankey-label.label-inside {
+  text-anchor: middle;
+  fill: var(--sankey-text-inverse);
+  font-weight: 500;
+}
+
+/* 値ラベル */
+.sankey-label-value {
+  font-size: var(--sankey-font-size-xs);
+  fill: var(--sankey-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ラベルの背景（読みやすさ向上） */
+.sankey-label-background {
+  fill: var(--sankey-bg-primary);
+  opacity: 0.85;
+}
+
+/* =============================================================================
+   5. ツールチップスタイル
+   ============================================================================= */
+
+.sankey-tooltip {
+  position: absolute;
+  z-index: 1000;
+  max-width: var(--sankey-tooltip-max-width);
+  padding: var(--sankey-tooltip-padding-y) var(--sankey-tooltip-padding-x);
+  background-color: var(--sankey-bg-primary);
+  border: 1px solid var(--sankey-border-default);
+  border-radius: var(--sankey-tooltip-border-radius);
+  box-shadow: var(--sankey-shadow-lg);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity var(--sankey-duration-fast) var(--sankey-easing-default),
+    transform var(--sankey-duration-fast) var(--sankey-easing-default);
+}
+
+.sankey-tooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ツールチップの矢印 */
+.sankey-tooltip::before {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background-color: var(--sankey-bg-primary);
+  border: 1px solid var(--sankey-border-default);
+  border-right: none;
+  border-bottom: none;
+  transform: rotate(45deg);
+}
+
+.sankey-tooltip.position-top::before {
+  bottom: -5px;
+  left: 50%;
+  margin-left: -4px;
+  transform: rotate(-135deg);
+}
+
+.sankey-tooltip.position-bottom::before {
+  top: -5px;
+  left: 50%;
+  margin-left: -4px;
+  transform: rotate(45deg);
+}
+
+/* ツールチップコンテンツ */
+.sankey-tooltip-title {
+  font-size: var(--sankey-font-size-md);
+  font-weight: 600;
+  color: var(--sankey-text-primary);
+  margin-bottom: var(--sankey-spacing-1);
+}
+
+.sankey-tooltip-content {
+  font-size: var(--sankey-font-size-sm);
+  color: var(--sankey-text-secondary);
+  line-height: 1.5;
+}
+
+.sankey-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sankey-spacing-4);
+}
+
+.sankey-tooltip-label {
+  color: var(--sankey-text-secondary);
+}
+
+.sankey-tooltip-value {
+  font-weight: 500;
+  color: var(--sankey-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* カラーインジケーター */
+.sankey-tooltip-color {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: var(--sankey-spacing-2);
+  vertical-align: middle;
+}
+
+/* =============================================================================
+   6. 凡例スタイル
+   ============================================================================= */
+
+.sankey-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sankey-spacing-3);
+  padding: var(--sankey-spacing-3);
+  font-size: var(--sankey-font-size-sm);
+}
+
+/* 凡例の配置バリアント */
+.sankey-legend.position-top {
+  flex-direction: row;
+  justify-content: center;
+  border-bottom: 1px solid var(--sankey-border-subtle);
+}
+
+.sankey-legend.position-bottom {
+  flex-direction: row;
+  justify-content: center;
+  border-top: 1px solid var(--sankey-border-subtle);
+}
+
+.sankey-legend.position-left {
+  flex-direction: column;
+  align-items: flex-start;
+  border-right: 1px solid var(--sankey-border-subtle);
+}
+
+.sankey-legend.position-right {
+  flex-direction: column;
+  align-items: flex-start;
+  border-left: 1px solid var(--sankey-border-subtle);
+}
+
+/* 凡例アイテム */
+.sankey-legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sankey-spacing-2);
+  cursor: pointer;
+  padding: var(--sankey-spacing-1) var(--sankey-spacing-2);
+  border-radius: 4px;
+  transition: background-color var(--sankey-duration-fast) var(--sankey-easing-default);
+}
+
+.sankey-legend-item:hover {
+  background-color: var(--sankey-bg-secondary);
+}
+
+.sankey-legend-item:focus {
+  outline: none;
+}
+
+.sankey-legend-item:focus-visible {
+  outline: 2px solid var(--sankey-focus-ring);
+  outline-offset: 2px;
+}
+
+/* 凡例カラーシンボル */
+.sankey-legend-symbol {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* 凡例ラベル */
+.sankey-legend-label {
+  color: var(--sankey-text-primary);
+  white-space: nowrap;
+}
+
+/* 非アクティブ状態 */
+.sankey-legend-item.inactive {
+  opacity: 0.5;
+}
+
+.sankey-legend-item.inactive .sankey-legend-symbol {
+  background-color: var(--sankey-text-tertiary) !important;
+}
+
+/* =============================================================================
+   7. アクセシビリティ強化スタイル
+   ============================================================================= */
+
+/* スクリーンリーダー専用テキスト */
+.sankey-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* フォーカストラップ */
+.sankey-focus-trap {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ハイコントラストモード対応 */
+@media (forced-colors: active) {
+  .sankey-node rect {
+    stroke: CanvasText;
+    stroke-width: 1px;
+  }
+
+  .sankey-link {
+    stroke: LinkText;
+  }
+
+  .sankey-label {
+    fill: CanvasText;
+  }
+
+  .sankey-tooltip {
+    border: 2px solid CanvasText;
+  }
+
+  .sankey-legend-symbol {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* キーボードナビゲーションインジケーター */
+.sankey-keyboard-hint {
+  position: absolute;
+  bottom: var(--sankey-spacing-2);
+  left: var(--sankey-spacing-2);
+  font-size: var(--sankey-font-size-xs);
+  color: var(--sankey-text-tertiary);
+  opacity: 0;
+  transition: opacity var(--sankey-duration-fast) var(--sankey-easing-default);
+}
+
+.sankey-chart:focus-within .sankey-keyboard-hint {
+  opacity: 1;
+}
+
+/* =============================================================================
+   8. アニメーション
+   ============================================================================= */
+
+/* 初期表示アニメーション */
+@keyframes sankey-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sankey-node-enter {
+  from {
+    opacity: 0;
+    transform: scaleY(0);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes sankey-link-draw {
+  from {
+    stroke-dashoffset: 1000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.sankey-chart.animate-enter .sankey-node {
+  animation: sankey-node-enter var(--sankey-duration-normal) var(--sankey-easing-default);
+  animation-fill-mode: backwards;
+}
+
+.sankey-chart.animate-enter .sankey-link {
+  stroke-dasharray: 1000;
+  animation: sankey-link-draw 1s var(--sankey-easing-default);
+}
+
+/* =============================================================================
+   9. レスポンシブスタイル
+   ============================================================================= */
+
+/* 小さい画面 */
+@media (max-width: 576px) {
+  .sankey-label {
+    font-size: var(--sankey-font-size-xs);
+  }
+
+  .sankey-tooltip {
+    max-width: 200px;
+  }
+
+  .sankey-legend {
+    font-size: var(--sankey-font-size-xs);
+    gap: var(--sankey-spacing-2);
+  }
+
+  .sankey-legend-symbol {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+/* タッチデバイス */
+@media (hover: none) and (pointer: coarse) {
+  .sankey-node,
+  .sankey-link,
+  .sankey-legend-item {
+    /* タッチターゲットを大きくする */
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .sankey-tooltip {
+    /* タッチデバイスではツールチップを大きく */
+    padding: var(--sankey-spacing-4);
+  }
+}
+
+/* アニメーション削減 */
+@media (prefers-reduced-motion: reduce) {
+  .sankey-node,
+  .sankey-link,
+  .sankey-tooltip,
+  .sankey-legend-item {
+    transition: none;
+  }
+
+  .sankey-chart.animate-enter .sankey-node,
+  .sankey-chart.animate-enter .sankey-link {
+    animation: none;
+  }
+}
+
+/* =============================================================================
+   10. プリントスタイル
+   ============================================================================= */
+
+@media print {
+  .sankey-chart {
+    background-color: white !important;
+    color: black !important;
+  }
+
+  .sankey-tooltip {
+    display: none !important;
+  }
+
+  .sankey-legend {
+    border: none !important;
+  }
+
+  .sankey-node rect {
+    stroke: #000 !important;
+    stroke-width: 0.5px !important;
+  }
+
+  .sankey-link {
+    stroke-opacity: 0.6 !important;
+  }
+
+  .sankey-label {
+    fill: black !important;
+  }
+}
