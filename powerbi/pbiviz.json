@@ -6,13 +6,13 @@
     "visualClassName": "SankeyVisual",
     "version": "1.0.0.0",
     "description": "High-performance Sankey Chart visualization for Power BI with gradient links and interactive features",
-    "supportUrl": "https://github.com/yourusername/sankey-chart",
-    "gitHubUrl": "https://github.com/yourusername/sankey-chart"
+    "supportUrl": "https://github.com/kei-furuyama/sankey_chart",
+    "gitHubUrl": "https://github.com/kei-furuyama/sankey_chart"
   },
   "apiVersion": "5.9.0",
   "author": {
-    "name": "Your Name",
-    "email": "your.email@example.com"
+    "name": "Kei Furuyama",
+    "email": "kei-furuyama@users.noreply.github.com"
   },
   "assets": {
     "icon": "assets/icon.png"

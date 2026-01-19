@@ -1,21 +1,11 @@
 /**
  * Power BI Module Exports
  *
- * Power BI Custom Visual開発で使用するコンポーネントをエクスポート。
- * pbivizプロジェクトではこのモジュールをインポートします。
+ * Power BI互換のデータ変換ユーティリティをエクスポート。
+ *
+ * 注意: 実際のPower BIカスタムビジュアルは powerbi/src/visual.ts を使用します。
+ * このモジュールはデータ変換やWeb統合用のヘルパーです。
  */
-
-// Visual Implementation
-export { SankeyVisual, create } from './visual';
-export type {
-  IVisual,
-  VisualConstructorOptions,
-  VisualUpdateOptions,
-  IVisualHost,
-  IViewport,
-  VisualUpdateType,
-  FormattingModel,
-} from './visual';
 
 // DataView Transformer
 export { transformDataView, getSelectedNodeIds, getHighlightedRows } from './dataViewTransformer';
@@ -35,9 +25,6 @@ export {
   parseSettings,
 } from './settings';
 
-// React Component
+// React Component for Power BI-style integration
 export { PowerBISankeyChart, ReactMountManager } from './component';
 export type { PowerBISankeyChartProps } from './component';
-
-// Re-export core for convenience
-export * from '../core';

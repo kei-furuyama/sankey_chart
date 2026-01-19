@@ -21,8 +21,6 @@ import type {
   ComputedGraph,
   ComputedNode,
   ComputedLink,
-  NodeAlignment,
-  DEFAULT_CONFIG,
 } from '../types';
 
 // =============================================================================
