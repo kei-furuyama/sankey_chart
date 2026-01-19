@@ -67,6 +67,8 @@ export interface DataViewMetadataColumn {
 // Transformer Options
 // =============================================================================
 
+type AggregationMethod = 'sum' | 'average' | 'max' | 'min';
+
 export interface TransformOptions {
   /** ソース列の役割名 */
   sourceRole?: string;
@@ -79,7 +81,7 @@ export interface TransformOptions {
   /** 0以下の値を除外 */
   filterNonPositive?: boolean;
   /** 重複リンクの集約方法 */
-  aggregation?: 'sum' | 'average' | 'max' | 'min';
+  aggregation?: AggregationMethod;
 }
 
 const DEFAULT_OPTIONS: Required<TransformOptions> = {
@@ -194,21 +196,13 @@ function findValueColumnByRole(
 function aggregateValues(
   existing: number,
   newValue: number,
-  method: 'sum' | 'average' | 'max' | 'min'
+  method: AggregationMethod
 ): number {
-  switch (method) {
-    case 'sum':
-      return existing + newValue;
-    case 'max':
-      return Math.max(existing, newValue);
-    case 'min':
-      return Math.min(existing, newValue);
-    case 'average':
-      // Note: 正確な平均には件数の追跡が必要
-      return (existing + newValue) / 2;
-    default:
-      return existing + newValue;
-  }
+  if (method === 'sum') return existing + newValue;
+  if (method === 'max') return Math.max(existing, newValue);
+  if (method === 'min') return Math.min(existing, newValue);
+  // Note: 正確な平均には件数の追跡が必要
+  return (existing + newValue) / 2;
 }
 
 // =============================================================================

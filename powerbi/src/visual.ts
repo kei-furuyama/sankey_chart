@@ -193,9 +193,8 @@ function parseSettings(dataView: DataView): VisualSettings {
     return { ...DEFAULT_SETTINGS };
   }
 
-  const nodeSettings = objects.nodeSettings;
-  const linkSettings = objects.linkSettings;
-  const labelSettings = objects.labelSettings;
+  const { nodeSettings, linkSettings, labelSettings } = objects;
+  const opacityPercent = (linkSettings?.opacity as number) ?? 50;
 
   // Extract color from fill object if present
   const nodeColor = (nodeSettings?.defaultColor as { solid?: { color?: string } })?.solid?.color;
@@ -205,7 +204,7 @@ function parseSettings(dataView: DataView): VisualSettings {
     nodeWidth: (nodeSettings?.width as number) ?? DEFAULT_SETTINGS.nodeWidth,
     nodePadding: (nodeSettings?.padding as number) ?? DEFAULT_SETTINGS.nodePadding,
     nodeDefaultColor: nodeColor ?? DEFAULT_SETTINGS.nodeDefaultColor,
-    linkOpacity: ((linkSettings?.opacity as number) ?? 50) / 100,
+    linkOpacity: opacityPercent / 100,
     linkColorMode: (linkSettings?.colorMode as string) ?? DEFAULT_SETTINGS.linkColorMode,
     labelFontSize: (labelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.labelFontSize,
     labelColor: labelColor ?? DEFAULT_SETTINGS.labelColor,
@@ -851,18 +850,18 @@ export class Visual implements IVisual {
     const { labelFontSize, labelColor } = this.settings;
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
-
     const textColor = isHighContrast && hcColors ? hcColors.foreground : labelColor;
+    const midPoint = chartWidth / 2;
+    const labelOffset = 6;
 
     nodeGroups.append('text')
       .attr('x', d => {
-        const x0 = d.x0 ?? 0;
-        const x1 = d.x1 ?? 0;
-        return x0 < chartWidth / 2 ? x1 + 6 : x0 - 6;
+        const isLeftSide = (d.x0 ?? 0) < midPoint;
+        return isLeftSide ? (d.x1 ?? 0) + labelOffset : (d.x0 ?? 0) - labelOffset;
       })
       .attr('y', d => ((d.y0 ?? 0) + (d.y1 ?? 0)) / 2)
       .attr('dy', '0.35em')
-      .attr('text-anchor', d => (d.x0 ?? 0) < chartWidth / 2 ? 'start' : 'end')
+      .attr('text-anchor', d => (d.x0 ?? 0) < midPoint ? 'start' : 'end')
       .attr('font-family', 'Segoe UI, sans-serif')
       .attr('font-size', labelFontSize)
       .attr('fill', textColor)
