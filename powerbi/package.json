@@ -32,6 +32,8 @@
     "powerbi-visuals-api": "~5.9.0",
     "powerbi-visuals-tools": "^5.4.0",
     "powerbi-visuals-utils-dataviewutils": "^6.1.0",
+    "powerbi-visuals-utils-formattingmodel": "^6.2.2",
+    "powerbi-visuals-utils-tooltiputils": "^6.0.0",
     "typescript": "^5.3.3"
   },
   "engines": {

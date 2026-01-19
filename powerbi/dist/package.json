@@ -1,6 +1,6 @@
 {
 		"version": "1.0.0.0",
-		"author": {"name":"Your Name","email":"your.email@example.com"},
+		"author": {"name":"Kei Furuyama","email":"kei-furuyama@users.noreply.github.com"},
 		"resources": [
 			{
 				"resourceId": "rId0",
@@ -8,7 +8,7 @@
 				"file": "resources/sankeyChartCustomViz1234567890.pbiviz.json"
 			}
 		],
-		"visual": {"name":"sankeyChartCustom","displayName":"Sankey Chart","guid":"sankeyChartCustomViz1234567890","visualClassName":"SankeyVisual","version":"1.0.0.0","description":"High-performance Sankey Chart visualization for Power BI with gradient links and interactive features","supportUrl":"https://github.com/yourusername/sankey-chart","gitHubUrl":"https://github.com/yourusername/sankey-chart"},
+		"visual": {"name":"sankeyChartCustom","displayName":"Sankey Chart","guid":"sankeyChartCustomViz1234567890","visualClassName":"SankeyVisual","version":"1.0.0.0","description":"High-performance Sankey Chart visualization for Power BI with gradient links and interactive features","supportUrl":"https://github.com/kei-furuyama/sankey_chart","gitHubUrl":"https://github.com/kei-furuyama/sankey_chart"},
 		"metadata": {
 			"pbivizjson": {
 				"resourceId": "rId0"
