@@ -1,0 +1,39 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Override for library build
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    // Output directory
+    "outDir": "./dist",
+    "rootDir": "./src/lib",
+
+    // Module settings for library
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+
+    // Generate declaration files
+    "emitDeclarationOnly": false,
+
+    // Composite for project references
+    "composite": true,
+
+    // Remove path aliases for library output
+    "paths": {}
+  },
+  "include": [
+    "src/lib/**/*.ts",
+    "src/lib/**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ]
+}

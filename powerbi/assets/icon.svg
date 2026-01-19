@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">
+  <!-- Background -->
+  <rect width="20" height="20" fill="#ffffff"/>
+
+  <!-- Left nodes -->
+  <rect x="1" y="2" width="3" height="5" fill="#1f77b4" rx="0.5"/>
+  <rect x="1" y="9" width="3" height="4" fill="#ff7f0e" rx="0.5"/>
+  <rect x="1" y="15" width="3" height="3" fill="#2ca02c" rx="0.5"/>
+
+  <!-- Right nodes -->
+  <rect x="16" y="3" width="3" height="6" fill="#1f77b4" rx="0.5"/>
+  <rect x="16" y="11" width="3" height="6" fill="#ff7f0e" rx="0.5"/>
+
+  <!-- Links (curved paths) -->
+  <path d="M4,4 C10,4 10,5 16,5" fill="none" stroke="#1f77b4" stroke-width="2" opacity="0.4"/>
+  <path d="M4,5.5 C10,5.5 10,8 16,8" fill="none" stroke="#1f77b4" stroke-width="1" opacity="0.4"/>
+  <path d="M4,11 C10,11 10,12 16,12" fill="none" stroke="#ff7f0e" stroke-width="2" opacity="0.4"/>
+  <path d="M4,12.5 C10,12.5 10,15 16,15" fill="none" stroke="#ff7f0e" stroke-width="1.5" opacity="0.4"/>
+  <path d="M4,16 C10,16 10,16 16,16" fill="none" stroke="#2ca02c" stroke-width="1" opacity="0.4"/>
+</svg>

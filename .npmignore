@@ -1,0 +1,46 @@
+# Source files (only dist is published)
+src/
+public/
+scripts/
+
+# Next.js specific
+.next/
+out/
+
+# Development files
+*.config.js
+*.config.ts
+tsconfig.json
+tsconfig.lib.json
+tailwind.config.ts
+postcss.config.js
+next.config.js
+vercel.json
+
+# Test files
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+coverage/
+vitest.config.ts
+
+# Environment and IDE
+.env*
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+.github/
+
+# Misc
+.DS_Store
+*.log
+.vercel/
+.turbo/
+node_modules/
+
+# Documentation source (README.md is included via files in package.json)
+docs/
