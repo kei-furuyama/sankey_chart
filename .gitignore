@@ -71,6 +71,4 @@ public/workbox-*.js
 
 # Power BI
 powerbi/.tmp/
-powerbi/dist/
-powerbi/*.pbiviz
 powerbi/webpack.statistics.*.html
