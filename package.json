@@ -8,7 +8,7 @@
     "type": "git",
     "url": "https://github.com/yourusername/sankey-chart"
   },
-  "homepage": "https://sankey-chart.vercel.app",
+  "homepage": "https://github.com/kei-furuyama/sankey_chart",
   "bugs": {
     "url": "https://github.com/yourusername/sankey-chart/issues"
   },
@@ -53,19 +53,15 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "lint:fix": "next lint --fix",
     "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "build:lib": "tsup",
     "build:lib:watch": "tsup --watch",
     "prepublishOnly": "npm run build:lib",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
-    "clean": "rm -rf dist .next node_modules/.cache",
-    "analyze": "ANALYZE=true next build",
+    "clean": "rm -rf dist node_modules/.cache",
     "pbiviz:start": "cd powerbi && pbiviz start",
     "pbiviz:package": "cd powerbi && pbiviz package",
     "pbiviz:install": "npm install --prefix powerbi"
@@ -82,8 +78,6 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
-    "@next/bundle-analyzer": "^14.1.0",
-    "@tailwindcss/typography": "^0.5.10",
     "@testing-library/jest-dom": "^6.9.1",
     "@types/d3": "^7.4.3",
     "@types/d3-interpolate": "^3.0.4",
@@ -95,20 +89,15 @@
     "@types/react-dom": "^18.2.18",
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "^1.2.2",
-    "autoprefixer": "^10.4.17",
     "eslint": "^8.56.0",
-    "eslint-config-next": "^14.1.0",
     "jsdom": "^27.4.0",
     "less": "^4.2.0",
     "less-loader": "^12.2.0",
-    "next": "^14.1.0",
-    "postcss": "^8.4.33",
     "powerbi-visuals-api": "^5.9.0",
     "powerbi-visuals-tools": "^5.4.0",
     "powerbi-visuals-utils-dataviewutils": "^6.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "tailwindcss": "^3.4.1",
     "tsup": "^8.0.1",
     "typescript": "^5.3.3",
     "vitest": "^1.2.2"
