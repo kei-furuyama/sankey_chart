@@ -77,12 +77,7 @@
           "displayName": "Color Mode",
           "displayNameKey": "Visual_ColorMode",
           "type": {
-            "enumeration": [
-              { "value": "source", "displayName": "Source" },
-              { "value": "target", "displayName": "Target" },
-              { "value": "gradient", "displayName": "Gradient" },
-              { "value": "fixed", "displayName": "Fixed" }
-            ]
+            "enumeration": []
           }
         },
         "opacity": {
@@ -94,13 +89,7 @@
           "displayName": "Link Sort",
           "displayNameKey": "Visual_LinkSort",
           "type": {
-            "enumeration": [
-              { "value": "ascending", "displayName": "Ascending (minimize crossing)" },
-              { "value": "descending", "displayName": "Descending" },
-              { "value": "byValue", "displayName": "By Value (small to large)" },
-              { "value": "byValueDesc", "displayName": "By Value (large to small)" },
-              { "value": "none", "displayName": "None" }
-            ]
+            "enumeration": []
           }
         }
       }
