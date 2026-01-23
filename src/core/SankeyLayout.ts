@@ -25,8 +25,8 @@ import type {
   ComputedNode,
   ComputedLink,
   NodeAlignment,
-  LinkSortMode,
 } from '../types';
+import { getLinkSortFunction } from '../utils/link-sort';
 
 // ============================================================
 // アライメント関数マッピング
@@ -38,45 +38,6 @@ const ALIGNMENT_MAP = {
   center: sankeyCenter,
   justify: sankeyJustify,
 } as const;
-
-// ============================================================
-// リンクソート関数マッピング
-// ============================================================
-
-/**
- * リンクソートモードに対応するソート関数を取得
- * d3-sankeyのlinkSort()に渡す比較関数を返す
- */
-function getLinkSortFunction(
-  mode: LinkSortMode
-): ((a: SankeyLinkDatum, b: SankeyLinkDatum) => number) | undefined {
-  switch (mode) {
-    case 'ascending':
-      // Y座標昇順（交差最小化に効果的）
-      return (a, b) => {
-        const aY = ((a as ComputedLink).y0 ?? 0) + ((a as ComputedLink).y1 ?? 0);
-        const bY = ((b as ComputedLink).y0 ?? 0) + ((b as ComputedLink).y1 ?? 0);
-        return aY - bY;
-      };
-    case 'descending':
-      // Y座標降順
-      return (a, b) => {
-        const aY = ((a as ComputedLink).y0 ?? 0) + ((a as ComputedLink).y1 ?? 0);
-        const bY = ((b as ComputedLink).y0 ?? 0) + ((b as ComputedLink).y1 ?? 0);
-        return bY - aY;
-      };
-    case 'byValue':
-      // 値の昇順（細いリンクが上）
-      return (a, b) => a.value - b.value;
-    case 'byValueDesc':
-      // 値の降順（太いリンクが上）
-      return (a, b) => b.value - a.value;
-    case 'none':
-    default:
-      // ソートなし（undefinedを返すとd3-sankeyはソートしない）
-      return undefined;
-  }
-}
 
 // ============================================================
 // SankeyLayout クラス

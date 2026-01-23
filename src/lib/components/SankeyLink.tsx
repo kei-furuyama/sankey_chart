@@ -77,6 +77,8 @@ export const SankeyLink = memo(function SankeyLink({
     labelFontSize = 10,
     labelColor = '#374151',
     labelBackground = 'rgba(255, 255, 255, 0.85)',
+    minLabelWidth = 8,
+    labelPadding = 4,
     valueFormatter = (v: number) => v.toLocaleString(),
   } = style;
 
@@ -112,8 +114,12 @@ export const SankeyLink = memo(function SankeyLink({
   const formattedValue = useMemo(() => valueFormatter(link.value), [link.value, valueFormatter]);
 
   // Only show label if link is wide enough (to avoid clutter)
-  const isLinkWideEnough = link.width >= 8;
+  const isLinkWideEnough = link.width >= minLabelWidth;
   const showLinkLabel = shouldShowLabel && isLinkWideEnough && !isDimmed;
+
+  // Calculate label background dimensions with proper padding
+  const labelWidth = formattedValue.length * labelFontSize * 0.6 + labelPadding * 2;
+  const labelHeight = labelFontSize * 1.4;
 
   return (
     <g className="sankey-link">
@@ -170,10 +176,10 @@ export const SankeyLink = memo(function SankeyLink({
         <g className="sankey-link-label" pointerEvents="none">
           {/* Background for readability */}
           <rect
-            x={labelCenter.x - (formattedValue.length * labelFontSize * 0.35)}
-            y={labelCenter.y - labelFontSize * 0.6}
-            width={formattedValue.length * labelFontSize * 0.7}
-            height={labelFontSize * 1.2}
+            x={labelCenter.x - labelWidth / 2}
+            y={labelCenter.y - labelHeight / 2}
+            width={labelWidth}
+            height={labelHeight}
             rx={3}
             ry={3}
             fill={labelBackground}

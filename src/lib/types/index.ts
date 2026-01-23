@@ -89,15 +89,9 @@ export interface ComputedLink extends Omit<SankeyLink, 'source' | 'target'> {
 /**
  * Layout configuration options
  */
-/**
- * Link sort mode for controlling link order at nodes
- * - 'ascending': Sort by Y position (minimizes crossing)
- * - 'descending': Sort by Y position descending
- * - 'byValue': Sort by value ascending (thin links on top)
- * - 'byValueDesc': Sort by value descending (thick links on top)
- * - 'none': No sorting (data order)
- */
-export type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'none';
+// Import and re-export LinkSortMode from core types for consistency
+import type { LinkSortMode } from '../../types';
+export type { LinkSortMode };
 
 export interface SankeyLayoutOptions {
   /** Width of the diagram */
@@ -162,6 +156,10 @@ export interface SankeyStyleOptions {
     labelColor?: string;
     /** Label background color (for readability) */
     labelBackground?: string;
+    /** Minimum link width to show label (default: 8) */
+    minLabelWidth?: number;
+    /** Horizontal padding for label background (default: 4) */
+    labelPadding?: number;
     /** Custom value formatter for link labels */
     valueFormatter?: (value: number) => string;
   };

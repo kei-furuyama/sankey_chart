@@ -15,10 +15,10 @@ import {
 import type {
   SankeyData,
   SankeyLayoutOptions,
-  LinkSortMode,
   ComputedNode,
   ComputedLink,
 } from '../types';
+import { getLinkSortFunction } from './link-sort';
 
 /**
  * Node alignment functions mapping
@@ -29,35 +29,6 @@ const alignmentFunctions = {
   center: sankeyCenter,
   justify: sankeyJustify,
 } as const;
-
-/**
- * Get link sort function based on mode
- */
-function getLinkSortFunction(
-  mode: LinkSortMode
-): ((a: any, b: any) => number) | undefined {
-  switch (mode) {
-    case 'ascending':
-      return (a, b) => {
-        const aY = (a.y0 ?? 0) + (a.y1 ?? 0);
-        const bY = (b.y0 ?? 0) + (b.y1 ?? 0);
-        return aY - bY;
-      };
-    case 'descending':
-      return (a, b) => {
-        const aY = (a.y0 ?? 0) + (a.y1 ?? 0);
-        const bY = (b.y0 ?? 0) + (b.y1 ?? 0);
-        return bY - aY;
-      };
-    case 'byValue':
-      return (a, b) => a.value - b.value;
-    case 'byValueDesc':
-      return (a, b) => b.value - a.value;
-    case 'none':
-    default:
-      return undefined;
-  }
-}
 
 /**
  * Default layout options
