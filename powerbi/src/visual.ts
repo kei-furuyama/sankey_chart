@@ -267,11 +267,15 @@ function extractDropdownValue(raw: unknown, defaultValue: string): string {
 
 function parseSettings(dataView: DataView): VisualSettings {
   const objects = dataView?.metadata?.objects;
+  console.log('[parseSettings] objects:', JSON.stringify(objects, null, 2));
+
   if (!objects) {
+    console.log('[parseSettings] No objects, using defaults');
     return { ...DEFAULT_SETTINGS };
   }
 
   const { nodeSettings, linkSettings, linkLabelSettings, labelSettings } = objects;
+  console.log('[parseSettings] linkSettings:', JSON.stringify(linkSettings, null, 2));
   const opacityPercent = (linkSettings?.opacity as number) ?? 50;
 
   // Extract color from fill object if present
@@ -279,11 +283,14 @@ function parseSettings(dataView: DataView): VisualSettings {
   const labelColor = (labelSettings?.color as { solid?: { color?: string } })?.solid?.color;
 
   // Parse linkSort mode - ItemDropdown values can be objects
+  console.log('[parseSettings] sortMode raw:', linkSettings?.sortMode);
   const linkSortValue = extractDropdownValue(linkSettings?.sortMode, DEFAULT_SETTINGS.linkSort);
+  console.log('[parseSettings] linkSortValue after extract:', linkSortValue);
   const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'none'];
   const linkSort: LinkSortMode = validLinkSortModes.includes(linkSortValue as LinkSortMode)
     ? (linkSortValue as LinkSortMode)
     : DEFAULT_SETTINGS.linkSort;
+  console.log('[parseSettings] final linkSort:', linkSort);
 
   return {
     nodeWidth: (nodeSettings?.width as number) ?? DEFAULT_SETTINGS.nodeWidth,
@@ -759,11 +766,16 @@ export class Visual implements IVisual {
     // - undefined: use d3-sankey's internal crossing-minimization (don't call linkSort at all)
     // - null: disable all sorting (explicit null)
     // - function: use custom comparator
+    console.log('[renderSankey] this.settings.linkSort:', this.settings.linkSort);
     const linkSortFn = getLinkSortFunction(this.settings.linkSort);
+    console.log('[renderSankey] linkSortFn:', linkSortFn);
     if (linkSortFn !== undefined) {
       // Only set linkSort if we have a specific value (function or null)
       // Leaving linkSort unset (undefined) lets d3-sankey use its internal algorithm
+      console.log('[renderSankey] Calling sankeyGenerator.linkSort()');
       sankeyGenerator.linkSort(linkSortFn);
+    } else {
+      console.log('[renderSankey] NOT calling linkSort (using d3 default)');
     }
 
     const graph = sankeyGenerator({
