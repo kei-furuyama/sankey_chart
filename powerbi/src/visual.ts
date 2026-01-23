@@ -163,15 +163,27 @@ class LinkSettingsCard extends formattingSettings.SimpleCard {
     value: { value: 'ascending', displayName: 'Ascending (minimize crossing)' },
   });
 
-  showLabels = new formattingSettings.ToggleSwitch({
-    name: 'showLabels',
-    displayName: 'Show Link Labels',
+  name: string = 'linkSettings';
+  displayName: string = 'Links';
+  slices: formattingSettings.Slice[] = [this.colorMode, this.opacity, this.sortMode];
+}
+
+/**
+ * Link Labels settings card with topLevelSlice for show toggle.
+ * When topLevelSlice is set, the toggle appears in the card header and controls
+ * whether the card's slices are shown/enabled.
+ * @see https://learn.microsoft.com/en-us/power-bi/developer/visuals/formatting-model-card
+ */
+class LinkLabelSettingsCard extends formattingSettings.SimpleCard {
+  show = new formattingSettings.ToggleSwitch({
+    name: 'show',
+    displayName: 'Show',
     value: DEFAULT_SETTINGS.showLinkLabels,
   });
 
-  labelFontSize = new formattingSettings.NumUpDown({
-    name: 'labelFontSize',
-    displayName: 'Label Font Size',
+  fontSize = new formattingSettings.NumUpDown({
+    name: 'fontSize',
+    displayName: 'Font Size',
     value: DEFAULT_SETTINGS.linkLabelFontSize,
     options: {
       minValue: { value: 6, type: powerbi.visuals.ValidatorType.Min },
@@ -179,15 +191,22 @@ class LinkSettingsCard extends formattingSettings.SimpleCard {
     },
   });
 
-  name: string = 'linkSettings';
-  displayName: string = 'Links';
-  slices: formattingSettings.Slice[] = [this.colorMode, this.opacity, this.sortMode, this.showLabels, this.labelFontSize];
+  name: string = 'linkLabelSettings';
+  displayName: string = 'Link Labels';
+  topLevelSlice: formattingSettings.ToggleSwitch = this.show;
+  slices: formattingSettings.Slice[] = [this.fontSize];
 }
 
+/**
+ * Node Labels settings card with topLevelSlice for show toggle.
+ * When topLevelSlice is set, the toggle appears in the card header and controls
+ * whether the card's slices are shown/enabled.
+ * @see https://learn.microsoft.com/en-us/power-bi/developer/visuals/formatting-model-card
+ */
 class LabelSettingsCard extends formattingSettings.SimpleCard {
   show = new formattingSettings.ToggleSwitch({
     name: 'show',
-    displayName: 'Show Labels',
+    displayName: 'Show',
     value: DEFAULT_SETTINGS.showLabels,
   });
 
@@ -208,18 +227,21 @@ class LabelSettingsCard extends formattingSettings.SimpleCard {
   });
 
   name: string = 'labelSettings';
-  displayName: string = 'Labels';
-  slices: formattingSettings.Slice[] = [this.show, this.fontSize, this.color];
+  displayName: string = 'Node Labels';
+  topLevelSlice: formattingSettings.ToggleSwitch = this.show;
+  slices: formattingSettings.Slice[] = [this.fontSize, this.color];
 }
 
 class VisualFormattingSettingsModel extends formattingSettings.Model {
   nodeSettingsCard = new NodeSettingsCard();
   linkSettingsCard = new LinkSettingsCard();
+  linkLabelSettingsCard = new LinkLabelSettingsCard();
   labelSettingsCard = new LabelSettingsCard();
 
   cards: formattingSettings.SimpleCard[] = [
     this.nodeSettingsCard,
     this.linkSettingsCard,
+    this.linkLabelSettingsCard,
     this.labelSettingsCard,
   ];
 }
@@ -230,7 +252,7 @@ function parseSettings(dataView: DataView): VisualSettings {
     return { ...DEFAULT_SETTINGS };
   }
 
-  const { nodeSettings, linkSettings, labelSettings } = objects;
+  const { nodeSettings, linkSettings, linkLabelSettings, labelSettings } = objects;
   const opacityPercent = (linkSettings?.opacity as number) ?? 50;
 
   // Extract color from fill object if present
@@ -251,8 +273,9 @@ function parseSettings(dataView: DataView): VisualSettings {
     linkOpacity: opacityPercent / 100,
     linkColorMode: (linkSettings?.colorMode as string) ?? DEFAULT_SETTINGS.linkColorMode,
     linkSort,
-    showLinkLabels: (linkSettings?.showLabels as boolean) ?? DEFAULT_SETTINGS.showLinkLabels,
-    linkLabelFontSize: (linkSettings?.labelFontSize as number) ?? DEFAULT_SETTINGS.linkLabelFontSize,
+    // Link Labels settings now come from linkLabelSettings object
+    showLinkLabels: (linkLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLinkLabels,
+    linkLabelFontSize: (linkLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.linkLabelFontSize,
     labelFontSize: (labelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.labelFontSize,
     labelColor: labelColor ?? DEFAULT_SETTINGS.labelColor,
     showLabels: (labelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLabels,
@@ -260,28 +283,38 @@ function parseSettings(dataView: DataView): VisualSettings {
 }
 
 // Link Sort Function
+//
+// d3-sankey's linkSort behavior:
+// - undefined: d3-sankey uses its internal algorithm to minimize link crossings
+//              (reorderLinks/reorderNodeLinks are called during layout iterations)
+// - null: No sorting (links remain in input order, internal reordering is skipped)
+// - function: Custom comparator applied during computeNodeLinks (before y0/y1 are calculated)
+//
+// IMPORTANT: At the time linkSort is called, link.y0 and link.y1 are NOT yet computed.
+// Only link.value, link.source, link.target, and link.index are available.
+// Sorting by y0/y1 will NOT work because they are all undefined at sort time.
 
 function getLinkSortFunction(
   mode: LinkSortMode
-): ((a: { y0?: number; y1?: number; value: number }, b: { y0?: number; y1?: number; value: number }) => number) | undefined {
+): ((a: { value: number; index?: number }, b: { value: number; index?: number }) => number) | null | undefined {
   switch (mode) {
     case 'ascending':
-      return (a, b) => {
-        const aY = (a.y0 ?? 0) + (a.y1 ?? 0);
-        const bY = (b.y0 ?? 0) + (b.y1 ?? 0);
-        return aY - bY;
-      };
+      // Let d3-sankey use its internal crossing-minimization algorithm
+      // This is achieved by returning undefined, which triggers reorderLinks/reorderNodeLinks
+      return undefined;
     case 'descending':
-      return (a, b) => {
-        const aY = (a.y0 ?? 0) + (a.y1 ?? 0);
-        const bY = (b.y0 ?? 0) + (b.y1 ?? 0);
-        return bY - aY;
-      };
+      // Sort by value descending (large flows first)
+      // Note: y0/y1 are not available at sort time, so we sort by value instead
+      return (a, b) => b.value - a.value;
     case 'byValue':
+      // Sort by value ascending (small flows first)
       return (a, b) => a.value - b.value;
     case 'byValueDesc':
+      // Sort by value descending (large flows first)
       return (a, b) => b.value - a.value;
     case 'none':
+      // No sorting - return null to disable all link sorting including internal reordering
+      return null;
     default:
       return undefined;
   }
@@ -703,11 +736,15 @@ export class Visual implements IVisual {
       .extent([[0, 0], [width, height]]);
 
     // Apply link sort function
+    // getLinkSortFunction returns:
+    // - undefined: use d3-sankey's internal crossing-minimization (don't call linkSort at all)
+    // - null: disable all sorting (explicit null)
+    // - function: use custom comparator
     const linkSortFn = getLinkSortFunction(this.settings.linkSort);
-    if (linkSortFn) {
+    if (linkSortFn !== undefined) {
+      // Only set linkSort if we have a specific value (function or null)
+      // Leaving linkSort unset (undefined) lets d3-sankey use its internal algorithm
       sankeyGenerator.linkSort(linkSortFn);
-    } else {
-      sankeyGenerator.linkSort(null);
     }
 
     const graph = sankeyGenerator({

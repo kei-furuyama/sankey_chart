@@ -73,8 +73,14 @@ export function createSankeyGenerator(
     .iterations(iterations);
 
   // Apply link sort if specified
+  // getLinkSortFunction returns:
+  // - undefined: use d3-sankey's internal crossing-minimization (don't call linkSort at all)
+  // - null: disable all sorting (explicit null)
+  // - function: use custom comparator
   const linkSortFn = getLinkSortFunction(linkSort);
-  if (linkSortFn) {
+  if (linkSortFn !== undefined) {
+    // Only set linkSort if we have a specific value (function or null)
+    // Leaving linkSort unset (undefined) lets d3-sankey use its internal algorithm
     generator.linkSort(linkSortFn);
   }
 

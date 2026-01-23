@@ -89,15 +89,44 @@
           "displayName": "Opacity (%)",
           "displayNameKey": "Visual_Opacity",
           "type": { "numeric": true }
+        },
+        "sortMode": {
+          "displayName": "Link Sort",
+          "displayNameKey": "Visual_LinkSort",
+          "type": {
+            "enumeration": [
+              { "value": "ascending", "displayName": "Ascending (minimize crossing)" },
+              { "value": "descending", "displayName": "Descending" },
+              { "value": "byValue", "displayName": "By Value (small to large)" },
+              { "value": "byValueDesc", "displayName": "By Value (large to small)" },
+              { "value": "none", "displayName": "None" }
+            ]
+          }
+        }
+      }
+    },
+    "linkLabelSettings": {
+      "displayName": "Link Labels",
+      "displayNameKey": "Visual_LinkLabels",
+      "properties": {
+        "show": {
+          "displayName": "Show",
+          "displayNameKey": "Visual_ShowLinkLabels",
+          "type": { "bool": true }
+        },
+        "fontSize": {
+          "displayName": "Font Size",
+          "displayNameKey": "Visual_LinkLabelFontSize",
+          "type": { "numeric": true }
         }
       }
     },
     "labelSettings": {
-      "displayName": "Labels",
-      "displayNameKey": "Visual_Labels",
+      "displayName": "Node Labels",
+      "displayNameKey": "Visual_NodeLabels",
       "properties": {
         "show": {
-          "displayName": "Show Labels",
+          "displayName": "Show",
           "displayNameKey": "Visual_ShowLabels",
           "type": { "bool": true }
         },
