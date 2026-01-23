@@ -89,6 +89,16 @@ export interface ComputedLink extends Omit<SankeyLink, 'source' | 'target'> {
 /**
  * Layout configuration options
  */
+/**
+ * Link sort mode for controlling link order at nodes
+ * - 'ascending': Sort by Y position (minimizes crossing)
+ * - 'descending': Sort by Y position descending
+ * - 'byValue': Sort by value ascending (thin links on top)
+ * - 'byValueDesc': Sort by value descending (thick links on top)
+ * - 'none': No sorting (data order)
+ */
+export type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'none';
+
 export interface SankeyLayoutOptions {
   /** Width of the diagram */
   width: number;
@@ -102,6 +112,8 @@ export interface SankeyLayoutOptions {
   nodeAlign?: 'left' | 'right' | 'center' | 'justify';
   /** Number of relaxation iterations */
   iterations?: number;
+  /** Link sort mode for controlling link order at nodes (default: 'ascending') */
+  linkSort?: LinkSortMode;
   /** Margin around the diagram */
   margin?: {
     top: number;
@@ -142,6 +154,16 @@ export interface SankeyStyleOptions {
     hoverOpacity?: number;
     /** Gradient mode */
     gradient?: boolean;
+    /** Show value label on link */
+    showLabel?: boolean;
+    /** Label font size */
+    labelFontSize?: number;
+    /** Label text color */
+    labelColor?: string;
+    /** Label background color (for readability) */
+    labelBackground?: string;
+    /** Custom value formatter for link labels */
+    valueFormatter?: (value: number) => string;
   };
   /** Label styles */
   label?: {
@@ -198,8 +220,10 @@ export interface SankeyChartProps {
   style?: SankeyStyleOptions;
   /** Event handlers */
   events?: SankeyEventHandlers;
-  /** Whether to show labels */
+  /** Whether to show node labels */
   showLabels?: boolean;
+  /** Whether to show value labels on links */
+  showLinkLabels?: boolean;
   /** Whether to show tooltips */
   showTooltips?: boolean;
   /** Custom tooltip renderer */

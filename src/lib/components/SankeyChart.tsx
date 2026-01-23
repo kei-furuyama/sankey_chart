@@ -48,6 +48,7 @@ export const SankeyChart = memo(function SankeyChart({
   style = {},
   events = {},
   showLabels = true,
+  showLinkLabels = false,
   showTooltips = true,
   renderTooltip,
   className = '',
@@ -214,6 +215,7 @@ export const SankeyChart = memo(function SankeyChart({
               style={style.link}
               isHighlighted={highlightedLinks.has(link.index)}
               isDimmed={hasHighlight && !highlightedLinks.has(link.index)}
+              showLabel={showLinkLabels}
               onClick={(e) => handleLinkClick(link, e)}
               onMouseEnter={(e) => handleLinkMouseEnter(link, e)}
               onMouseLeave={(e) => handleLinkMouseLeave(link, e)}

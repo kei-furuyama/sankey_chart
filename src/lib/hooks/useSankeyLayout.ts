@@ -51,6 +51,7 @@ export function useSankeyLayout(
   const nodeWidth = layoutOptions.nodeWidth;
   const nodeAlign = layoutOptions.nodeAlign;
   const iterations = layoutOptions.iterations;
+  const linkSort = layoutOptions.linkSort;
   const marginTop = layoutOptions.margin?.top;
   const marginRight = layoutOptions.margin?.right;
   const marginBottom = layoutOptions.margin?.bottom;
@@ -95,6 +96,7 @@ export function useSankeyLayout(
         nodeWidth,
         nodeAlign,
         iterations,
+        linkSort,
       };
 
       if (hasMargin) {
@@ -137,7 +139,7 @@ export function useSankeyLayout(
         isValid: false,
       };
     }
-  }, [data, colors, width, height, nodePadding, nodeWidth, nodeAlign, iterations, marginTop, marginRight, marginBottom, marginLeft]);
+  }, [data, colors, width, height, nodePadding, nodeWidth, nodeAlign, iterations, linkSort, marginTop, marginRight, marginBottom, marginLeft]);
 
   return result;
 }
