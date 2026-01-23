@@ -61,12 +61,17 @@ type ComputedLink = SankeyLink<SankeyNodeDatum, SankeyLinkDatum>;
 
 // Settings
 
+type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'none';
+
 interface VisualSettings {
   nodeWidth: number;
   nodePadding: number;
   nodeDefaultColor: string;
   linkOpacity: number;
   linkColorMode: string;
+  linkSort: LinkSortMode;
+  showLinkLabels: boolean;
+  linkLabelFontSize: number;
   labelFontSize: number;
   labelColor: string;
   showLabels: boolean;
@@ -78,6 +83,9 @@ const DEFAULT_SETTINGS: VisualSettings = {
   nodeDefaultColor: '#1f77b4',
   linkOpacity: 0.5,
   linkColorMode: 'source',
+  linkSort: 'ascending',
+  showLinkLabels: false,
+  linkLabelFontSize: 10,
   labelFontSize: 12,
   labelColor: '#333333',
   showLabels: true,
@@ -142,9 +150,38 @@ class LinkSettingsCard extends formattingSettings.SimpleCard {
     },
   });
 
+  sortMode = new formattingSettings.ItemDropdown({
+    name: 'sortMode',
+    displayName: 'Link Sort',
+    items: [
+      { value: 'ascending', displayName: 'Ascending (minimize crossing)' },
+      { value: 'descending', displayName: 'Descending' },
+      { value: 'byValue', displayName: 'By Value (small to large)' },
+      { value: 'byValueDesc', displayName: 'By Value (large to small)' },
+      { value: 'none', displayName: 'None' },
+    ],
+    value: { value: 'ascending', displayName: 'Ascending (minimize crossing)' },
+  });
+
+  showLabels = new formattingSettings.ToggleSwitch({
+    name: 'showLabels',
+    displayName: 'Show Link Labels',
+    value: DEFAULT_SETTINGS.showLinkLabels,
+  });
+
+  labelFontSize = new formattingSettings.NumUpDown({
+    name: 'labelFontSize',
+    displayName: 'Label Font Size',
+    value: DEFAULT_SETTINGS.linkLabelFontSize,
+    options: {
+      minValue: { value: 6, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 24, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
   name: string = 'linkSettings';
   displayName: string = 'Links';
-  slices: formattingSettings.Slice[] = [this.colorMode, this.opacity];
+  slices: formattingSettings.Slice[] = [this.colorMode, this.opacity, this.sortMode, this.showLabels, this.labelFontSize];
 }
 
 class LabelSettingsCard extends formattingSettings.SimpleCard {
@@ -200,16 +237,54 @@ function parseSettings(dataView: DataView): VisualSettings {
   const nodeColor = (nodeSettings?.defaultColor as { solid?: { color?: string } })?.solid?.color;
   const labelColor = (labelSettings?.color as { solid?: { color?: string } })?.solid?.color;
 
+  // Parse linkSort mode
+  const linkSortValue = linkSettings?.sortMode as string;
+  const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'none'];
+  const linkSort: LinkSortMode = validLinkSortModes.includes(linkSortValue as LinkSortMode)
+    ? (linkSortValue as LinkSortMode)
+    : DEFAULT_SETTINGS.linkSort;
+
   return {
     nodeWidth: (nodeSettings?.width as number) ?? DEFAULT_SETTINGS.nodeWidth,
     nodePadding: (nodeSettings?.padding as number) ?? DEFAULT_SETTINGS.nodePadding,
     nodeDefaultColor: nodeColor ?? DEFAULT_SETTINGS.nodeDefaultColor,
     linkOpacity: opacityPercent / 100,
     linkColorMode: (linkSettings?.colorMode as string) ?? DEFAULT_SETTINGS.linkColorMode,
+    linkSort,
+    showLinkLabels: (linkSettings?.showLabels as boolean) ?? DEFAULT_SETTINGS.showLinkLabels,
+    linkLabelFontSize: (linkSettings?.labelFontSize as number) ?? DEFAULT_SETTINGS.linkLabelFontSize,
     labelFontSize: (labelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.labelFontSize,
     labelColor: labelColor ?? DEFAULT_SETTINGS.labelColor,
     showLabels: (labelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLabels,
   };
+}
+
+// Link Sort Function
+
+function getLinkSortFunction(
+  mode: LinkSortMode
+): ((a: { y0?: number; y1?: number; value: number }, b: { y0?: number; y1?: number; value: number }) => number) | undefined {
+  switch (mode) {
+    case 'ascending':
+      return (a, b) => {
+        const aY = (a.y0 ?? 0) + (a.y1 ?? 0);
+        const bY = (b.y0 ?? 0) + (b.y1 ?? 0);
+        return aY - bY;
+      };
+    case 'descending':
+      return (a, b) => {
+        const aY = (a.y0 ?? 0) + (a.y1 ?? 0);
+        const bY = (b.y0 ?? 0) + (b.y1 ?? 0);
+        return bY - aY;
+      };
+    case 'byValue':
+      return (a, b) => a.value - b.value;
+    case 'byValueDesc':
+      return (a, b) => b.value - a.value;
+    case 'none':
+    default:
+      return undefined;
+  }
 }
 
 // Data Transformer
@@ -627,6 +702,14 @@ export class Visual implements IVisual {
       .nodePadding(this.settings.nodePadding)
       .extent([[0, 0], [width, height]]);
 
+    // Apply link sort function
+    const linkSortFn = getLinkSortFunction(this.settings.linkSort);
+    if (linkSortFn) {
+      sankeyGenerator.linkSort(linkSortFn);
+    } else {
+      sankeyGenerator.linkSort(null);
+    }
+
     const graph = sankeyGenerator({
       nodes: data.nodes.map(d => ({ ...d })),
       links: data.links.map(d => ({ ...d })),
@@ -732,12 +815,90 @@ export class Visual implements IVisual {
         tooltipService.hide({ immediately: true, isTouchEvent: false });
       });
 
+    // Render link labels if enabled
+    if (this.settings.showLinkLabels) {
+      this.renderLinkLabels(container, links);
+    }
+
     // Allow clicking empty space to clear selection (only if interactions allowed)
     this.svg.on('click', () => {
       if (this.allowInteractions) {
         selectionManager.clear();
       }
     });
+  }
+
+  private renderLinkLabels(
+    container: Selection<SVGGElement, unknown, null, undefined>,
+    links: ComputedLink[]
+  ): void {
+    const { linkLabelFontSize } = this.settings;
+    const isHighContrast = this.isHighContrastMode;
+    const hcColors = this.highContrastColors;
+    const textColor = isHighContrast && hcColors ? hcColors.foreground : '#374151';
+    const bgColor = isHighContrast && hcColors ? hcColors.background : 'rgba(255, 255, 255, 0.85)';
+    const minLinkWidth = 8;
+    const labelPadding = 4;
+
+    // Filter links that are wide enough for labels
+    const labelsToRender = links.filter(d => (d.width ?? 0) >= minLinkWidth);
+
+    const labelGroups = container.append('g')
+      .classed('link-labels', true)
+      .selectAll('g')
+      .data(labelsToRender)
+      .enter()
+      .append('g')
+      .style('pointer-events', 'none');
+
+    // Calculate center position for each link
+    const getLinkCenter = (d: ComputedLink): { x: number; y: number } => {
+      const source = d.source as ComputedNode;
+      const target = d.target as ComputedNode;
+      const sourceX = source.x1 ?? 0;
+      const targetX = target.x0 ?? 0;
+      const sourceY = d.y0 ?? 0;
+      const targetY = d.y1 ?? 0;
+      return {
+        x: (sourceX + targetX) / 2,
+        y: (sourceY + targetY) / 2,
+      };
+    };
+
+    // Add background rectangles for readability
+    labelGroups.append('rect')
+      .attr('x', d => {
+        const center = getLinkCenter(d);
+        const text = String(d.value ?? 0);
+        const width = text.length * linkLabelFontSize * 0.6 + labelPadding * 2;
+        return center.x - width / 2;
+      })
+      .attr('y', d => {
+        const center = getLinkCenter(d);
+        const height = linkLabelFontSize * 1.4;
+        return center.y - height / 2;
+      })
+      .attr('width', d => {
+        const text = String(d.value ?? 0);
+        return text.length * linkLabelFontSize * 0.6 + labelPadding * 2;
+      })
+      .attr('height', linkLabelFontSize * 1.4)
+      .attr('rx', 3)
+      .attr('ry', 3)
+      .attr('fill', bgColor)
+      .attr('opacity', 0.9);
+
+    // Add text labels
+    labelGroups.append('text')
+      .attr('x', d => getLinkCenter(d).x)
+      .attr('y', d => getLinkCenter(d).y)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('font-family', 'Segoe UI, sans-serif')
+      .attr('font-size', linkLabelFontSize)
+      .attr('font-weight', '500')
+      .attr('fill', textColor)
+      .text(d => (d.value ?? 0).toLocaleString());
   }
 
   private renderNodes(
