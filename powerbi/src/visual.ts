@@ -718,6 +718,25 @@ export class Visual implements IVisual {
           VisualFormattingSettingsModel,
           dataView
         );
+
+        // Read ItemDropdown values directly from formattingSettings (more reliable)
+        const sortModeValue = this.formattingSettings.linkSettingsCard.sortMode.value;
+        const colorModeValue = this.formattingSettings.linkSettingsCard.colorMode.value;
+        console.log('[update] formattingSettings sortMode.value:', sortModeValue);
+        console.log('[update] formattingSettings colorMode.value:', colorModeValue);
+
+        // Override parseSettings values with formattingSettings values
+        if (sortModeValue && typeof sortModeValue === 'object' && 'value' in sortModeValue) {
+          const sortMode = (sortModeValue as { value: string }).value as LinkSortMode;
+          if (['ascending', 'descending', 'byValue', 'byValueDesc', 'none'].includes(sortMode)) {
+            this.settings.linkSort = sortMode;
+            console.log('[update] Overriding linkSort from formattingSettings:', sortMode);
+          }
+        }
+        if (colorModeValue && typeof colorModeValue === 'object' && 'value' in colorModeValue) {
+          this.settings.linkColorMode = (colorModeValue as { value: string }).value;
+          console.log('[update] Overriding linkColorMode from formattingSettings:', this.settings.linkColorMode);
+        }
       }
 
       this.svg
