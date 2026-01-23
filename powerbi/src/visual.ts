@@ -246,6 +246,25 @@ class VisualFormattingSettingsModel extends formattingSettings.Model {
   ];
 }
 
+/**
+ * Extract value from ItemDropdown which can be either:
+ * - string (direct value)
+ * - object { value: string, displayName?: string }
+ */
+function extractDropdownValue(raw: unknown, defaultValue: string): string {
+  if (raw === null || raw === undefined) {
+    return defaultValue;
+  }
+  if (typeof raw === 'string') {
+    return raw;
+  }
+  if (typeof raw === 'object' && 'value' in raw) {
+    const val = (raw as { value?: string }).value;
+    return typeof val === 'string' ? val : defaultValue;
+  }
+  return defaultValue;
+}
+
 function parseSettings(dataView: DataView): VisualSettings {
   const objects = dataView?.metadata?.objects;
   if (!objects) {
@@ -259,8 +278,8 @@ function parseSettings(dataView: DataView): VisualSettings {
   const nodeColor = (nodeSettings?.defaultColor as { solid?: { color?: string } })?.solid?.color;
   const labelColor = (labelSettings?.color as { solid?: { color?: string } })?.solid?.color;
 
-  // Parse linkSort mode
-  const linkSortValue = linkSettings?.sortMode as string;
+  // Parse linkSort mode - ItemDropdown values can be objects
+  const linkSortValue = extractDropdownValue(linkSettings?.sortMode, DEFAULT_SETTINGS.linkSort);
   const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'none'];
   const linkSort: LinkSortMode = validLinkSortModes.includes(linkSortValue as LinkSortMode)
     ? (linkSortValue as LinkSortMode)
@@ -271,7 +290,7 @@ function parseSettings(dataView: DataView): VisualSettings {
     nodePadding: (nodeSettings?.padding as number) ?? DEFAULT_SETTINGS.nodePadding,
     nodeDefaultColor: nodeColor ?? DEFAULT_SETTINGS.nodeDefaultColor,
     linkOpacity: opacityPercent / 100,
-    linkColorMode: (linkSettings?.colorMode as string) ?? DEFAULT_SETTINGS.linkColorMode,
+    linkColorMode: extractDropdownValue(linkSettings?.colorMode, DEFAULT_SETTINGS.linkColorMode),
     linkSort,
     // Link Labels settings now come from linkLabelSettings object
     showLinkLabels: (linkLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLinkLabels,
