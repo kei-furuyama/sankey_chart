@@ -89,6 +89,10 @@ export interface ComputedLink extends Omit<SankeyLink, 'source' | 'target'> {
 /**
  * Layout configuration options
  */
+// Import and re-export LinkSortMode from core types for consistency
+import type { LinkSortMode } from '../../types';
+export type { LinkSortMode };
+
 export interface SankeyLayoutOptions {
   /** Width of the diagram */
   width: number;
@@ -102,6 +106,8 @@ export interface SankeyLayoutOptions {
   nodeAlign?: 'left' | 'right' | 'center' | 'justify';
   /** Number of relaxation iterations */
   iterations?: number;
+  /** Link sort mode for controlling link order at nodes (default: 'ascending') */
+  linkSort?: LinkSortMode;
   /** Margin around the diagram */
   margin?: {
     top: number;
@@ -142,6 +148,20 @@ export interface SankeyStyleOptions {
     hoverOpacity?: number;
     /** Gradient mode */
     gradient?: boolean;
+    /** Show value label on link */
+    showLabel?: boolean;
+    /** Label font size */
+    labelFontSize?: number;
+    /** Label text color */
+    labelColor?: string;
+    /** Label background color (for readability) */
+    labelBackground?: string;
+    /** Minimum link width to show label (default: 8) */
+    minLabelWidth?: number;
+    /** Horizontal padding for label background (default: 4) */
+    labelPadding?: number;
+    /** Custom value formatter for link labels */
+    valueFormatter?: (value: number) => string;
   };
   /** Label styles */
   label?: {
@@ -198,8 +218,10 @@ export interface SankeyChartProps {
   style?: SankeyStyleOptions;
   /** Event handlers */
   events?: SankeyEventHandlers;
-  /** Whether to show labels */
+  /** Whether to show node labels */
   showLabels?: boolean;
+  /** Whether to show value labels on links */
+  showLinkLabels?: boolean;
   /** Whether to show tooltips */
   showTooltips?: boolean;
   /** Custom tooltip renderer */

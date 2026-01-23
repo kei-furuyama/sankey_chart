@@ -334,6 +334,16 @@ export type ComputedGraph = SankeyGraph<SankeyNodeDatum, SankeyLinkDatum>;
 /** ノード配置アルゴリズム */
 export type NodeAlignment = 'left' | 'right' | 'center' | 'justify';
 
+/**
+ * リンクソートモード
+ * - 'ascending': Y座標昇順（上から下へ、交差最小化）
+ * - 'descending': Y座標降順（下から上へ）
+ * - 'byValue': 値の昇順（細いリンクが上）
+ * - 'byValueDesc': 値の降順（太いリンクが上）
+ * - 'none': ソートなし（データ順）
+ */
+export type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'none';
+
 /** レイアウト設定 */
 export interface SankeyLayoutConfig {
   /** ノード幅 (px) */
@@ -344,6 +354,8 @@ export interface SankeyLayoutConfig {
   nodeAlignment: NodeAlignment;
   /** レイアウト反復回数（精度向上） */
   iterations: number;
+  /** リンクソートモード（デフォルト: 'ascending'で交差最小化） */
+  linkSort?: LinkSortMode;
 }
 
 /** インタラクション設定 */
@@ -1189,6 +1201,7 @@ export const DEFAULT_CONFIG: SankeyChartConfig = {
     nodePadding: 16,
     nodeAlignment: 'justify',
     iterations: 32,
+    linkSort: 'ascending',
   },
   interaction: {
     enableHover: true,

@@ -67,6 +67,7 @@ export type {
   ComputedNode,
   ComputedLink,
   SankeyLayoutOptions,
+  LinkSortMode,
   SankeyStyleOptions,
   SankeyEventHandlers,
   SankeyChartProps,

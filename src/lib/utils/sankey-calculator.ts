@@ -18,6 +18,7 @@ import type {
   ComputedNode,
   ComputedLink,
 } from '../types';
+import { getLinkSortFunction } from './link-sort';
 
 /**
  * Node alignment functions mapping
@@ -39,6 +40,7 @@ const defaultLayoutOptions: Required<SankeyLayoutOptions> = {
   nodeWidth: 24,
   nodeAlign: 'justify',
   iterations: 6,
+  linkSort: 'ascending',
   margin: {
     top: 10,
     right: 10,
@@ -54,7 +56,7 @@ export function createSankeyGenerator(
   options: Partial<SankeyLayoutOptions> = {}
 ): D3SankeyLayout<SankeyGraph<{}, {}>, {}, {}> {
   const config = { ...defaultLayoutOptions, ...options };
-  const { width, height, nodePadding, nodeWidth, nodeAlign, iterations, margin } = config;
+  const { width, height, nodePadding, nodeWidth, nodeAlign, iterations, linkSort, margin } = config;
 
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
@@ -69,6 +71,12 @@ export function createSankeyGenerator(
       [margin.left + innerWidth, margin.top + innerHeight],
     ])
     .iterations(iterations);
+
+  // Apply link sort if specified
+  const linkSortFn = getLinkSortFunction(linkSort);
+  if (linkSortFn) {
+    generator.linkSort(linkSortFn);
+  }
 
   return generator as D3SankeyLayout<SankeyGraph<{}, {}>, {}, {}>;
 }

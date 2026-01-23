@@ -13,6 +13,8 @@ export interface SankeyLinkProps {
   isHighlighted?: boolean;
   /** Whether the link is dimmed */
   isDimmed?: boolean;
+  /** Whether to show the value label on the link */
+  showLabel?: boolean;
   /** Click handler */
   onClick?: (event: React.MouseEvent) => void;
   /** Mouse enter handler */
@@ -38,6 +40,22 @@ function generateSankeyPath(link: ComputedLink): string {
 }
 
 /**
+ * Calculate the center point of a link path for label positioning
+ */
+function getLinkCenterPoint(link: ComputedLink): { x: number; y: number } {
+  const sourceX = link.source.x1;
+  const targetX = link.target.x0;
+  const sourceY = link.y0;
+  const targetY = link.y1;
+
+  // Center point along the bezier curve (approximate)
+  const x = (sourceX + targetX) / 2;
+  const y = (sourceY + targetY) / 2;
+
+  return { x, y };
+}
+
+/**
  * Renders a single link in the Sankey diagram with refined styling
  */
 export const SankeyLink = memo(function SankeyLink({
@@ -45,6 +63,7 @@ export const SankeyLink = memo(function SankeyLink({
   style = {},
   isHighlighted = false,
   isDimmed = false,
+  showLabel = false,
   onClick,
   onMouseEnter,
   onMouseLeave,
@@ -54,7 +73,17 @@ export const SankeyLink = memo(function SankeyLink({
     opacity = 0.4,
     hoverOpacity = 0.7,
     gradient = true,
+    showLabel: styleShowLabel,
+    labelFontSize = 10,
+    labelColor = '#374151',
+    labelBackground = 'rgba(255, 255, 255, 0.85)',
+    minLabelWidth = 8,
+    labelPadding = 4,
+    valueFormatter = (v: number) => v.toLocaleString(),
   } = style;
+
+  // Determine if label should be shown (prop takes precedence over style)
+  const shouldShowLabel = showLabel || styleShowLabel;
 
   // Generate path
   const path = useMemo(() => generateSankeyPath(link), [link]);
@@ -79,6 +108,18 @@ export const SankeyLink = memo(function SankeyLink({
 
   // Stroke width with minimum for visibility
   const strokeWidth = Math.max(2, link.width);
+
+  // Calculate label position and visibility
+  const labelCenter = useMemo(() => getLinkCenterPoint(link), [link]);
+  const formattedValue = useMemo(() => valueFormatter(link.value), [link.value, valueFormatter]);
+
+  // Only show label if link is wide enough (to avoid clutter)
+  const isLinkWideEnough = link.width >= minLabelWidth;
+  const showLinkLabel = shouldShowLabel && isLinkWideEnough && !isDimmed;
+
+  // Calculate label background dimensions with proper padding
+  const labelWidth = formattedValue.length * labelFontSize * 0.6 + labelPadding * 2;
+  const labelHeight = labelFontSize * 1.4;
 
   return (
     <g className="sankey-link">
@@ -129,6 +170,44 @@ export const SankeyLink = memo(function SankeyLink({
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       />
+
+      {/* Value label on link */}
+      {showLinkLabel && (
+        <g className="sankey-link-label" pointerEvents="none">
+          {/* Background for readability */}
+          <rect
+            x={labelCenter.x - labelWidth / 2}
+            y={labelCenter.y - labelHeight / 2}
+            width={labelWidth}
+            height={labelHeight}
+            rx={3}
+            ry={3}
+            fill={labelBackground}
+            style={{
+              transition: 'opacity 0.2s ease',
+              opacity: isHighlighted ? 1 : 0.9,
+            }}
+          />
+          {/* Label text */}
+          <text
+            x={labelCenter.x}
+            y={labelCenter.y}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={labelFontSize}
+            fontFamily="Inter, system-ui, -apple-system, sans-serif"
+            fontWeight={500}
+            fill={labelColor}
+            style={{
+              transition: 'opacity 0.2s ease',
+              opacity: isHighlighted ? 1 : 0.85,
+              userSelect: 'none',
+            }}
+          >
+            {formattedValue}
+          </text>
+        </g>
+      )}
     </g>
   );
 });

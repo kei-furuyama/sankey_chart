@@ -26,6 +26,7 @@ import type {
   ComputedLink,
   NodeAlignment,
 } from '../types';
+import { getLinkSortFunction } from '../utils/link-sort';
 
 // ============================================================
 // アライメント関数マッピング
@@ -98,6 +99,13 @@ export class SankeyLayout {
       .nodeId((d) => d.id)
       // レイアウト反復回数（多いほど最適化されるが計算コスト増）
       .iterations(layout.iterations);
+
+    // リンクソート設定（交差最小化）
+    const linkSortMode = layout.linkSort ?? 'ascending';
+    const linkSortFn = getLinkSortFunction(linkSortMode);
+    if (linkSortFn) {
+      sankeyGenerator.linkSort(linkSortFn);
+    }
 
     // レイアウト計算実行
     const graph = sankeyGenerator(normalizedData);
