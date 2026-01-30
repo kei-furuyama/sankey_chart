@@ -1287,7 +1287,7 @@ export class Visual implements IVisual {
 
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Node', 'Node'), value: d.name },
-          { displayName: `${this.valueMeasureName} (Total)`, value: totalValue.toLocaleString() },
+          { displayName: this.valueMeasureName, value: totalValue.toLocaleString() },
         ];
 
         tooltipService.show({
