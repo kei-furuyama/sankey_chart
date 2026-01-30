@@ -62,6 +62,13 @@
           "displayNameKey": "Visual_NodePadding",
           "type": { "numeric": true }
         },
+        "colorMode": {
+          "displayName": "Color Mode",
+          "displayNameKey": "Visual_NodeColorMode",
+          "type": {
+            "enumeration": []
+          }
+        },
         "defaultColor": {
           "displayName": "Default Color",
           "displayNameKey": "Visual_DefaultColor",
@@ -77,27 +84,45 @@
           "displayName": "Color Mode",
           "displayNameKey": "Visual_ColorMode",
           "type": {
-            "enumeration": [
-              { "value": "source", "displayName": "Source" },
-              { "value": "target", "displayName": "Target" },
-              { "value": "gradient", "displayName": "Gradient" },
-              { "value": "fixed", "displayName": "Fixed" }
-            ]
+            "enumeration": []
           }
         },
         "opacity": {
           "displayName": "Opacity (%)",
           "displayNameKey": "Visual_Opacity",
           "type": { "numeric": true }
+        },
+        "sortMode": {
+          "displayName": "Link Sort",
+          "displayNameKey": "Visual_LinkSort",
+          "type": {
+            "enumeration": []
+          }
+        }
+      }
+    },
+    "linkLabelSettings": {
+      "displayName": "Link Labels",
+      "displayNameKey": "Visual_LinkLabels",
+      "properties": {
+        "show": {
+          "displayName": "Show",
+          "displayNameKey": "Visual_ShowLinkLabels",
+          "type": { "bool": true }
+        },
+        "fontSize": {
+          "displayName": "Font Size",
+          "displayNameKey": "Visual_LinkLabelFontSize",
+          "type": { "numeric": true }
         }
       }
     },
     "labelSettings": {
-      "displayName": "Labels",
-      "displayNameKey": "Visual_Labels",
+      "displayName": "Node Labels",
+      "displayNameKey": "Visual_NodeLabels",
       "properties": {
         "show": {
-          "displayName": "Show Labels",
+          "displayName": "Show",
           "displayNameKey": "Visual_ShowLabels",
           "type": { "bool": true }
         },
@@ -109,6 +134,48 @@
         "color": {
           "displayName": "Color",
           "displayNameKey": "Visual_LabelColor",
+          "type": { "fill": { "solid": { "color": true } } }
+        },
+        "fontFamily": {
+          "displayName": "Font",
+          "displayNameKey": "Visual_LabelFontFamily",
+          "type": { "formatting": { "fontFamily": true } }
+        }
+      }
+    },
+    "dataLabelSettings": {
+      "displayName": "Node Data Labels",
+      "displayNameKey": "Visual_NodeDataLabels",
+      "properties": {
+        "show": {
+          "displayName": "Show",
+          "displayNameKey": "Visual_ShowDataLabels",
+          "type": { "bool": true }
+        },
+        "fontSize": {
+          "displayName": "Font Size",
+          "displayNameKey": "Visual_DataLabelFontSize",
+          "type": { "numeric": true }
+        },
+        "color": {
+          "displayName": "Color",
+          "displayNameKey": "Visual_DataLabelColor",
+          "type": { "fill": { "solid": { "color": true } } }
+        },
+        "fontFamily": {
+          "displayName": "Font",
+          "displayNameKey": "Visual_DataLabelFontFamily",
+          "type": { "formatting": { "fontFamily": true } }
+        }
+      }
+    },
+    "nodeColors": {
+      "displayName": "Node Colors",
+      "displayNameKey": "Visual_NodeColors",
+      "properties": {
+        "fill": {
+          "displayName": "Color",
+          "displayNameKey": "Visual_NodeColor",
           "type": { "fill": { "solid": { "color": true } } }
         }
       }

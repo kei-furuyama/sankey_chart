@@ -7,9 +7,7 @@
 
 import powerbi from 'powerbi-visuals-api';
 import { sankey, sankeyLinkHorizontal, SankeyNode, SankeyLink } from 'd3-sankey';
-import { select, Selection, pointer } from 'd3';
-import { scaleOrdinal } from 'd3-scale';
-import { schemeCategory10 } from 'd3-scale-chromatic';
+import { select, Selection } from 'd3';
 
 import {
   formattingSettings,
@@ -49,11 +47,14 @@ interface SankeyLinkDatum {
 interface SankeyData {
   nodes: SankeyNodeDatum[];
   links: SankeyLinkDatum[];
+  valueMeasureName: string;
 }
 
 interface TransformDataViewOptions {
   dataView: DataView | undefined;
   host: IVisualHost;
+  nodeColorMode?: NodeColorMode;
+  nodeDefaultColor?: string;
 }
 
 type ComputedNode = SankeyNode<SankeyNodeDatum, SankeyLinkDatum>;
@@ -61,12 +62,17 @@ type ComputedLink = SankeyLink<SankeyNodeDatum, SankeyLinkDatum>;
 
 // Settings
 
-type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'none';
+type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'inputOrder' | 'none';
+type NodeColorMode = 'single' | 'category';
+
+const VALID_LINK_SORT_MODES: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
+const VALID_NODE_COLOR_MODES: NodeColorMode[] = ['single', 'category'];
 
 interface VisualSettings {
   nodeWidth: number;
   nodePadding: number;
   nodeDefaultColor: string;
+  nodeColorMode: NodeColorMode;
   linkOpacity: number;
   linkColorMode: string;
   linkSort: LinkSortMode;
@@ -74,13 +80,19 @@ interface VisualSettings {
   linkLabelFontSize: number;
   labelFontSize: number;
   labelColor: string;
+  labelFontFamily: string;
   showLabels: boolean;
+  showDataLabels: boolean;
+  dataLabelFontSize: number;
+  dataLabelColor: string;
+  dataLabelFontFamily: string;
 }
 
 const DEFAULT_SETTINGS: VisualSettings = {
   nodeWidth: 24,
   nodePadding: 16,
   nodeDefaultColor: '#1f77b4',
+  nodeColorMode: 'category',
   linkOpacity: 0.5,
   linkColorMode: 'source',
   linkSort: 'ascending',
@@ -88,7 +100,12 @@ const DEFAULT_SETTINGS: VisualSettings = {
   linkLabelFontSize: 10,
   labelFontSize: 12,
   labelColor: '#333333',
+  labelFontFamily: "'Segoe UI', sans-serif",
   showLabels: true,
+  showDataLabels: false,
+  dataLabelFontSize: 10,
+  dataLabelColor: '#666666',
+  dataLabelFontFamily: "'Segoe UI', sans-serif",
 };
 
 // =============================================================================
@@ -116,6 +133,16 @@ class NodeSettingsCard extends formattingSettings.SimpleCard {
     },
   });
 
+  colorMode = new formattingSettings.ItemDropdown({
+    name: 'colorMode',
+    displayName: 'Color Mode',
+    items: [
+      { value: 'category', displayName: 'Category Colors' },
+      { value: 'single', displayName: 'Single Color' },
+    ],
+    value: { value: 'category', displayName: 'Category Colors' },
+  });
+
   defaultColor = new formattingSettings.ColorPicker({
     name: 'defaultColor',
     displayName: 'Default Color',
@@ -124,7 +151,7 @@ class NodeSettingsCard extends formattingSettings.SimpleCard {
 
   name: string = 'nodeSettings';
   displayName: string = 'Nodes';
-  slices: formattingSettings.Slice[] = [this.width, this.padding, this.defaultColor];
+  slices: formattingSettings.Slice[] = [this.width, this.padding, this.colorMode, this.defaultColor];
 }
 
 class LinkSettingsCard extends formattingSettings.SimpleCard {
@@ -158,20 +185,33 @@ class LinkSettingsCard extends formattingSettings.SimpleCard {
       { value: 'descending', displayName: 'Descending' },
       { value: 'byValue', displayName: 'By Value (small to large)' },
       { value: 'byValueDesc', displayName: 'By Value (large to small)' },
+      { value: 'inputOrder', displayName: 'Input Order (data sort)' },
       { value: 'none', displayName: 'None' },
     ],
     value: { value: 'ascending', displayName: 'Ascending (minimize crossing)' },
   });
 
-  showLabels = new formattingSettings.ToggleSwitch({
-    name: 'showLabels',
-    displayName: 'Show Link Labels',
+  name: string = 'linkSettings';
+  displayName: string = 'Links';
+  slices: formattingSettings.Slice[] = [this.colorMode, this.opacity, this.sortMode];
+}
+
+/**
+ * Link Labels settings card with topLevelSlice for show toggle.
+ * When topLevelSlice is set, the toggle appears in the card header and controls
+ * whether the card's slices are shown/enabled.
+ * @see https://learn.microsoft.com/en-us/power-bi/developer/visuals/formatting-model-card
+ */
+class LinkLabelSettingsCard extends formattingSettings.SimpleCard {
+  show = new formattingSettings.ToggleSwitch({
+    name: 'show',
+    displayName: 'Show',
     value: DEFAULT_SETTINGS.showLinkLabels,
   });
 
-  labelFontSize = new formattingSettings.NumUpDown({
-    name: 'labelFontSize',
-    displayName: 'Label Font Size',
+  fontSize = new formattingSettings.NumUpDown({
+    name: 'fontSize',
+    displayName: 'Font Size',
     value: DEFAULT_SETTINGS.linkLabelFontSize,
     options: {
       minValue: { value: 6, type: powerbi.visuals.ValidatorType.Min },
@@ -179,15 +219,22 @@ class LinkSettingsCard extends formattingSettings.SimpleCard {
     },
   });
 
-  name: string = 'linkSettings';
-  displayName: string = 'Links';
-  slices: formattingSettings.Slice[] = [this.colorMode, this.opacity, this.sortMode, this.showLabels, this.labelFontSize];
+  name: string = 'linkLabelSettings';
+  displayName: string = 'Link Labels';
+  topLevelSlice: formattingSettings.ToggleSwitch = this.show;
+  slices: formattingSettings.Slice[] = [this.fontSize];
 }
 
+/**
+ * Node Labels settings card with topLevelSlice for show toggle.
+ * When topLevelSlice is set, the toggle appears in the card header and controls
+ * whether the card's slices are shown/enabled.
+ * @see https://learn.microsoft.com/en-us/power-bi/developer/visuals/formatting-model-card
+ */
 class LabelSettingsCard extends formattingSettings.SimpleCard {
   show = new formattingSettings.ToggleSwitch({
     name: 'show',
-    displayName: 'Show Labels',
+    displayName: 'Show',
     value: DEFAULT_SETTINGS.showLabels,
   });
 
@@ -207,21 +254,101 @@ class LabelSettingsCard extends formattingSettings.SimpleCard {
     value: { value: DEFAULT_SETTINGS.labelColor },
   });
 
+  fontFamily = new formattingSettings.FontPicker({
+    name: 'fontFamily',
+    displayName: 'Font',
+    value: DEFAULT_SETTINGS.labelFontFamily,
+  });
+
   name: string = 'labelSettings';
-  displayName: string = 'Labels';
-  slices: formattingSettings.Slice[] = [this.show, this.fontSize, this.color];
+  displayName: string = 'Node Labels';
+  topLevelSlice: formattingSettings.ToggleSwitch = this.show;
+  slices: formattingSettings.Slice[] = [this.fontFamily, this.fontSize, this.color];
+}
+
+class DataLabelSettingsCard extends formattingSettings.SimpleCard {
+  show = new formattingSettings.ToggleSwitch({
+    name: 'show',
+    displayName: 'Show',
+    value: DEFAULT_SETTINGS.showDataLabels,
+  });
+
+  fontSize = new formattingSettings.NumUpDown({
+    name: 'fontSize',
+    displayName: 'Font Size',
+    value: DEFAULT_SETTINGS.dataLabelFontSize,
+    options: {
+      minValue: { value: 6, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 48, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
+  color = new formattingSettings.ColorPicker({
+    name: 'color',
+    displayName: 'Color',
+    value: { value: DEFAULT_SETTINGS.dataLabelColor },
+  });
+
+  fontFamily = new formattingSettings.FontPicker({
+    name: 'fontFamily',
+    displayName: 'Font',
+    value: DEFAULT_SETTINGS.dataLabelFontFamily,
+  });
+
+  name: string = 'dataLabelSettings';
+  displayName: string = 'Node Data Labels';
+  topLevelSlice: formattingSettings.ToggleSwitch = this.show;
+  slices: formattingSettings.Slice[] = [this.fontFamily, this.fontSize, this.color];
 }
 
 class VisualFormattingSettingsModel extends formattingSettings.Model {
   nodeSettingsCard = new NodeSettingsCard();
   linkSettingsCard = new LinkSettingsCard();
+  linkLabelSettingsCard = new LinkLabelSettingsCard();
   labelSettingsCard = new LabelSettingsCard();
+  dataLabelSettingsCard = new DataLabelSettingsCard();
 
   cards: formattingSettings.SimpleCard[] = [
     this.nodeSettingsCard,
     this.linkSettingsCard,
+    this.linkLabelSettingsCard,
     this.labelSettingsCard,
+    this.dataLabelSettingsCard,
   ];
+}
+
+/**
+ * Extract value from ItemDropdown which can be either:
+ * - string (direct value)
+ * - object { value: string, displayName?: string }
+ */
+function extractDropdownValue(raw: unknown, defaultValue: string): string {
+  if (raw === null || raw === undefined) {
+    return defaultValue;
+  }
+  if (typeof raw === 'string') {
+    return raw;
+  }
+  if (typeof raw === 'object' && 'value' in raw) {
+    const val = (raw as { value?: string }).value;
+    return typeof val === 'string' ? val : defaultValue;
+  }
+  return defaultValue;
+}
+
+/**
+ * Extract a solid color value from a Power BI fill object.
+ */
+function extractFillColor(raw: unknown): string | undefined {
+  return (raw as { solid?: { color?: string } } | undefined)?.solid?.color;
+}
+
+/**
+ * Extract and validate a dropdown value against a list of valid options.
+ */
+function extractValidatedDropdown<T extends string>(raw: unknown, validValues: T[], defaultValue: T): T {
+  const extracted = extractDropdownValue(raw, defaultValue);
+  return validValues.includes(extracted as T) ? (extracted as T) : defaultValue;
 }
 
 function parseSettings(dataView: DataView): VisualSettings {
@@ -230,58 +357,66 @@ function parseSettings(dataView: DataView): VisualSettings {
     return { ...DEFAULT_SETTINGS };
   }
 
-  const { nodeSettings, linkSettings, labelSettings } = objects;
-  const opacityPercent = (linkSettings?.opacity as number) ?? 50;
-
-  // Extract color from fill object if present
-  const nodeColor = (nodeSettings?.defaultColor as { solid?: { color?: string } })?.solid?.color;
-  const labelColor = (labelSettings?.color as { solid?: { color?: string } })?.solid?.color;
-
-  // Parse linkSort mode
-  const linkSortValue = linkSettings?.sortMode as string;
-  const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'none'];
-  const linkSort: LinkSortMode = validLinkSortModes.includes(linkSortValue as LinkSortMode)
-    ? (linkSortValue as LinkSortMode)
-    : DEFAULT_SETTINGS.linkSort;
+  const { nodeSettings, linkSettings, linkLabelSettings, labelSettings, dataLabelSettings } = objects;
 
   return {
     nodeWidth: (nodeSettings?.width as number) ?? DEFAULT_SETTINGS.nodeWidth,
     nodePadding: (nodeSettings?.padding as number) ?? DEFAULT_SETTINGS.nodePadding,
-    nodeDefaultColor: nodeColor ?? DEFAULT_SETTINGS.nodeDefaultColor,
-    linkOpacity: opacityPercent / 100,
-    linkColorMode: (linkSettings?.colorMode as string) ?? DEFAULT_SETTINGS.linkColorMode,
-    linkSort,
-    showLinkLabels: (linkSettings?.showLabels as boolean) ?? DEFAULT_SETTINGS.showLinkLabels,
-    linkLabelFontSize: (linkSettings?.labelFontSize as number) ?? DEFAULT_SETTINGS.linkLabelFontSize,
+    nodeDefaultColor: extractFillColor(nodeSettings?.defaultColor) ?? DEFAULT_SETTINGS.nodeDefaultColor,
+    nodeColorMode: extractValidatedDropdown(nodeSettings?.colorMode, VALID_NODE_COLOR_MODES, DEFAULT_SETTINGS.nodeColorMode),
+    linkOpacity: ((linkSettings?.opacity as number) ?? 50) / 100,
+    linkColorMode: extractDropdownValue(linkSettings?.colorMode, DEFAULT_SETTINGS.linkColorMode),
+    linkSort: extractValidatedDropdown(linkSettings?.sortMode, VALID_LINK_SORT_MODES, DEFAULT_SETTINGS.linkSort),
+    showLinkLabels: (linkLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLinkLabels,
+    linkLabelFontSize: (linkLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.linkLabelFontSize,
     labelFontSize: (labelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.labelFontSize,
-    labelColor: labelColor ?? DEFAULT_SETTINGS.labelColor,
+    labelColor: extractFillColor(labelSettings?.color) ?? DEFAULT_SETTINGS.labelColor,
+    labelFontFamily: (labelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.labelFontFamily,
     showLabels: (labelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLabels,
+    showDataLabels: (dataLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showDataLabels,
+    dataLabelFontSize: (dataLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.dataLabelFontSize,
+    dataLabelColor: extractFillColor(dataLabelSettings?.color) ?? DEFAULT_SETTINGS.dataLabelColor,
+    dataLabelFontFamily: (dataLabelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.dataLabelFontFamily,
   };
 }
 
 // Link Sort Function
+//
+// d3-sankey's linkSort behavior:
+// - undefined: d3-sankey uses its internal algorithm to minimize link crossings
+//              (reorderLinks/reorderNodeLinks are called during layout iterations)
+// - null: No sorting (links remain in input order, internal reordering is skipped)
+// - function: Custom comparator applied during computeNodeLinks (before y0/y1 are calculated)
+//
+// IMPORTANT: At the time linkSort is called, link.y0 and link.y1 are NOT yet computed.
+// Only link.value, link.source, link.target, and link.index are available.
+// Sorting by y0/y1 will NOT work because they are all undefined at sort time.
 
 function getLinkSortFunction(
   mode: LinkSortMode
-): ((a: { y0?: number; y1?: number; value: number }, b: { y0?: number; y1?: number; value: number }) => number) | undefined {
+): ((a: { value: number; index?: number }, b: { value: number; index?: number }) => number) | null | undefined {
   switch (mode) {
     case 'ascending':
-      return (a, b) => {
-        const aY = (a.y0 ?? 0) + (a.y1 ?? 0);
-        const bY = (b.y0 ?? 0) + (b.y1 ?? 0);
-        return aY - bY;
-      };
+      // Let d3-sankey use its internal crossing-minimization algorithm
+      // This is achieved by returning undefined, which triggers reorderLinks/reorderNodeLinks
+      return undefined;
     case 'descending':
-      return (a, b) => {
-        const aY = (a.y0 ?? 0) + (a.y1 ?? 0);
-        const bY = (b.y0 ?? 0) + (b.y1 ?? 0);
-        return bY - aY;
-      };
+      // Sort by value descending (large flows first)
+      // Note: y0/y1 are not available at sort time, so we sort by value instead
+      return (a, b) => b.value - a.value;
     case 'byValue':
+      // Sort by value ascending (small flows first)
       return (a, b) => a.value - b.value;
     case 'byValueDesc':
+      // Sort by value descending (large flows first)
       return (a, b) => b.value - a.value;
+    case 'inputOrder':
+      // Preserve input order - return null to disable all sorting
+      // Combined with nodeSort(null), this keeps the data order from Power BI
+      return null;
     case 'none':
+      // No sorting - return null to disable all link sorting including internal reordering
+      return null;
     default:
       return undefined;
   }
@@ -347,19 +482,36 @@ function transformDataView(options: TransformDataViewOptions): SankeyData | null
     }
   }
 
-  const colorScale = scaleOrdinal<string>(schemeCategory10);
+  const colorMode = options.nodeColorMode ?? 'category';
+  const defaultColor = options.nodeDefaultColor ?? '#1f77b4';
+
+  // Build a map of node id -> user-specified color from per-row objects (nodeColors.fill)
+  const userColorMap = new Map<string, string>();
+  for (const col of [sourceColumn, targetColumn]) {
+    if (!col?.objects) continue;
+    for (let i = 0; i < col.values.length; i++) {
+      const fill = extractFillColor(col.objects[i]?.['nodeColors']?.fill);
+      const nodeId = String(col.values[i] ?? '');
+      if (fill && nodeId) {
+        userColorMap.set(nodeId, fill);
+      }
+    }
+  }
 
   // Create nodes with first selection ID (for cross-filtering by node)
   const nodes: SankeyNodeDatum[] = Array.from(nodeMap.entries()).map(([id, data]) => ({
     id,
     name: id,
-    color: colorScale(id),
+    color: colorMode === 'single'
+      ? defaultColor
+      : userColorMap.get(id) ?? host.colorPalette.getColor(id).value,
     selectionId: data.selectionIds[0], // Use first selectionId for the node
   }));
 
   return {
     nodes,
     links: Array.from(linkMap.values()),
+    valueMeasureName: valueColumn?.source.displayName ?? 'Value',
   };
 }
 
@@ -386,6 +538,7 @@ export class Visual implements IVisual {
   // Keyboard navigation state
   private focusedNodeIndex: number = -1;
   private currentNodes: ComputedNode[] = [];
+  private valueMeasureName: string = 'Value';
 
   // Interaction state
   private allowInteractions: boolean = true;
@@ -620,7 +773,49 @@ export class Visual implements IVisual {
    * Returns the formatting model for the new Format Pane
    */
   public getFormattingModel(): powerbi.visuals.FormattingModel {
-    return this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
+    // Hide defaultColor picker when using category colors
+    const isSingle = this.settings.nodeColorMode === 'single';
+    const card = this.formattingSettings.nodeSettingsCard;
+    card.slices = isSingle
+      ? [card.width, card.padding, card.colorMode, card.defaultColor]
+      : [card.width, card.padding, card.colorMode];
+
+    const model = this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
+
+    // In category mode, add per-node color pickers
+    if (!isSingle && this.currentNodes.length > 0) {
+      const nodeColorSlices = this.currentNodes.map(node => ({
+        uid: `nodeColors_fill_${node.id}`,
+        displayName: node.name,
+        control: {
+          type: powerbi.visuals.FormattingComponent.ColorPicker,
+          properties: {
+            descriptor: {
+              objectName: 'nodeColors',
+              propertyName: 'fill',
+              selector: node.selectionId
+                ? (node.selectionId as powerbi.visuals.ISelectionId).getSelector()
+                : null,
+            },
+            value: { value: node.color ?? this.host.colorPalette.getColor(node.id).value },
+          },
+        },
+      })) as unknown as powerbi.visuals.FormattingSlice[];
+
+      const nodeColorsCard: powerbi.visuals.FormattingCard = {
+        uid: 'nodeColorsCard',
+        displayName: 'Node Colors',
+        groups: [{
+          uid: 'nodeColorsGroup',
+          displayName: undefined as unknown as string,
+          slices: nodeColorSlices,
+        }],
+      };
+
+      model.cards.push(nodeColorsCard);
+    }
+
+    return model;
   }
 
   /**
@@ -659,6 +854,12 @@ export class Visual implements IVisual {
           VisualFormattingSettingsModel,
           dataView
         );
+
+        // Override dropdown values from formattingSettings (more reliable than dataView objects)
+        const { linkSettingsCard, nodeSettingsCard } = this.formattingSettings;
+        this.settings.linkSort = extractValidatedDropdown(linkSettingsCard.sortMode.value, VALID_LINK_SORT_MODES, this.settings.linkSort);
+        this.settings.linkColorMode = extractDropdownValue(linkSettingsCard.colorMode.value, this.settings.linkColorMode);
+        this.settings.nodeColorMode = extractValidatedDropdown(nodeSettingsCard.colorMode.value, VALID_NODE_COLOR_MODES, this.settings.nodeColorMode);
       }
 
       this.svg
@@ -667,15 +868,25 @@ export class Visual implements IVisual {
 
       this.svg.selectAll('*').remove();
 
-      const data = transformDataView({ dataView, host: this.host });
+      const data = transformDataView({
+        dataView,
+        host: this.host,
+        nodeColorMode: this.settings.nodeColorMode,
+        nodeDefaultColor: this.settings.nodeDefaultColor,
+      });
       if (!data || data.nodes.length === 0) {
         this.currentNodes = [];
         this.focusedNodeIndex = -1;
         this.showLandingPage(viewport);
+        this.target.style.pointerEvents = 'none';
+        this.target.removeAttribute('tabindex');
         this.eventService.renderingFinished(options);
         return;
       }
 
+      this.target.style.pointerEvents = '';
+      this.target.setAttribute('tabindex', '0');
+      this.valueMeasureName = data.valueMeasureName;
       this.renderSankey(data, viewport);
 
       // Signal rendering finished
@@ -703,11 +914,18 @@ export class Visual implements IVisual {
       .extent([[0, 0], [width, height]]);
 
     // Apply link sort function
+    // getLinkSortFunction returns:
+    // - undefined: use d3-sankey's internal crossing-minimization (don't call linkSort at all)
+    // - null: disable all sorting (explicit null)
+    // - function: use custom comparator
     const linkSortFn = getLinkSortFunction(this.settings.linkSort);
-    if (linkSortFn) {
+    if (linkSortFn !== undefined) {
       sankeyGenerator.linkSort(linkSortFn);
-    } else {
-      sankeyGenerator.linkSort(null);
+    }
+
+    // inputOrder: preserve data order for nodes by disabling d3's node reordering
+    if (this.settings.linkSort === 'inputOrder') {
+      sankeyGenerator.nodeSort(null);
     }
 
     const graph = sankeyGenerator({
@@ -794,7 +1012,7 @@ export class Visual implements IVisual {
         const targetName = (d.target as ComputedNode).name;
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Flow', 'Flow'), value: `${sourceName} → ${targetName}` },
-          { displayName: this.getLocalizedString('Visual_Tooltip_Value', 'Value'), value: String(d.value ?? 0) },
+          { displayName: this.valueMeasureName, value: (d.value ?? 0).toLocaleString() },
         ];
         tooltipService.show({
           dataItems: tooltipData,
@@ -968,14 +1186,14 @@ export class Visual implements IVisual {
 
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Node', 'Node'), value: d.name },
-          { displayName: this.getLocalizedString('Visual_Tooltip_TotalValue', 'Total Value'), value: String(totalValue) },
+          { displayName: `${this.valueMeasureName} (Total)`, value: totalValue.toLocaleString() },
         ];
 
         if (inflow > 0) {
-          tooltipData.push({ displayName: this.getLocalizedString('Visual_Tooltip_Inflow', 'Inflow'), value: String(inflow) });
+          tooltipData.push({ displayName: this.getLocalizedString('Visual_Tooltip_Inflow', 'Inflow'), value: inflow.toLocaleString() });
         }
         if (outflow > 0) {
-          tooltipData.push({ displayName: this.getLocalizedString('Visual_Tooltip_Outflow', 'Outflow'), value: String(outflow) });
+          tooltipData.push({ displayName: this.getLocalizedString('Visual_Tooltip_Outflow', 'Outflow'), value: outflow.toLocaleString() });
         }
 
         tooltipService.show({
@@ -1002,13 +1220,17 @@ export class Visual implements IVisual {
     if (this.settings.showLabels) {
       this.renderLabels(nodeGroups, chartWidth);
     }
+
+    if (this.settings.showDataLabels) {
+      this.renderDataLabels(nodeGroups, chartWidth);
+    }
   }
 
   private renderLabels(
     nodeGroups: Selection<SVGGElement, ComputedNode, SVGGElement, unknown>,
     chartWidth: number
   ): void {
-    const { labelFontSize, labelColor } = this.settings;
+    const { labelFontSize, labelColor, labelFontFamily } = this.settings;
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
     const textColor = isHighContrast && hcColors ? hcColors.foreground : labelColor;
@@ -1023,10 +1245,38 @@ export class Visual implements IVisual {
       .attr('y', d => ((d.y0 ?? 0) + (d.y1 ?? 0)) / 2)
       .attr('dy', '0.35em')
       .attr('text-anchor', d => (d.x0 ?? 0) < midPoint ? 'start' : 'end')
-      .attr('font-family', 'Segoe UI, sans-serif')
+      .attr('font-family', labelFontFamily)
       .attr('font-size', labelFontSize)
       .attr('fill', textColor)
       .text(d => d.name);
+  }
+
+  private renderDataLabels(
+    nodeGroups: Selection<SVGGElement, ComputedNode, SVGGElement, unknown>,
+    chartWidth: number
+  ): void {
+    const { dataLabelFontSize, dataLabelColor, dataLabelFontFamily } = this.settings;
+    const isHighContrast = this.isHighContrastMode;
+    const hcColors = this.highContrastColors;
+    const textColor = isHighContrast && hcColors ? hcColors.foreground : dataLabelColor;
+    const midPoint = chartWidth / 2;
+    const labelOffset = 6;
+    const showLabels = this.settings.showLabels;
+    // If name labels are also shown, offset the data label below
+    const dyValue = showLabels ? '1.5em' : '0.35em';
+
+    nodeGroups.append('text')
+      .attr('x', d => {
+        const isLeftSide = (d.x0 ?? 0) < midPoint;
+        return isLeftSide ? (d.x1 ?? 0) + labelOffset : (d.x0 ?? 0) - labelOffset;
+      })
+      .attr('y', d => ((d.y0 ?? 0) + (d.y1 ?? 0)) / 2)
+      .attr('dy', dyValue)
+      .attr('text-anchor', d => (d.x0 ?? 0) < midPoint ? 'start' : 'end')
+      .attr('font-family', dataLabelFontFamily)
+      .attr('font-size', dataLabelFontSize)
+      .attr('fill', textColor)
+      .text(d => (d.value ?? 0).toLocaleString());
   }
 
   /**
@@ -1086,15 +1336,15 @@ export class Visual implements IVisual {
       .attr('font-size', '16px')
       .attr('font-weight', '600')
       .attr('fill', textColor)
-      .text(this.getLocalizedString('Visual_LandingPage_Title', 'Sankey Chart'));
+      .text('Sankey Chart');
 
-    // Instructions (localized)
+    // Instructions
     const instructions = [
-      this.getLocalizedString('Visual_LandingPage_Instruction', 'To get started, add data fields:'),
+      'To get started, add data fields:',
       '',
-      this.getLocalizedString('Visual_LandingPage_Source', 'Source - Origin node name'),
-      this.getLocalizedString('Visual_LandingPage_Target', 'Target - Destination node name'),
-      this.getLocalizedString('Visual_LandingPage_Value', 'Value - Flow quantity (optional)'),
+      'Source \u2013 Origin node name',
+      'Target \u2013 Destination node name',
+      'Value \u2013 Flow quantity (optional)',
     ];
 
     const instructionGroup = landingGroup.append('g')
@@ -1110,17 +1360,6 @@ export class Visual implements IVisual {
         .attr('fill', i === 0 ? textColor : subtextColor)
         .text(text);
     });
-
-    // Keyboard hint (if space permits)
-    if (viewport.height > 300) {
-      landingGroup.append('text')
-        .attr('y', 140)
-        .attr('text-anchor', 'middle')
-        .attr('font-family', 'Segoe UI, sans-serif')
-        .attr('font-size', '11px')
-        .attr('fill', subtextColor)
-        .text(this.getLocalizedString('Visual_LandingPage_Tip', 'Tip: Use Tab/Arrow keys to navigate, Enter to select'));
-    }
   }
 }
 

@@ -1,15 +1,7 @@
 {
-  "extends": ["next/core-web-vitals"],
+  "root": true,
+  "parser": "@typescript-eslint/parser",
   "rules": {
-    "react/no-unescaped-entities": "off",
-    "@next/next/no-img-element": "off"
-  },
-  "overrides": [
-    {
-      "files": ["src/lib/**/*.ts", "src/lib/**/*.tsx"],
-      "rules": {
-        "no-console": ["warn", { "allow": ["warn", "error"] }]
-      }
-    }
-  ]
+    "no-console": ["warn", { "allow": ["warn", "error"] }]
+  }
 }

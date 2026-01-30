@@ -100,10 +100,16 @@ export class SankeyLayout {
       // レイアウト反復回数（多いほど最適化されるが計算コスト増）
       .iterations(layout.iterations);
 
-    // リンクソート設定（交差最小化）
+    // リンクソート設定
+    // getLinkSortFunction returns:
+    // - undefined: use d3-sankey's internal crossing-minimization (don't call linkSort at all)
+    // - null: disable all sorting (explicit null)
+    // - function: use custom comparator
     const linkSortMode = layout.linkSort ?? 'ascending';
     const linkSortFn = getLinkSortFunction(linkSortMode);
-    if (linkSortFn) {
+    if (linkSortFn !== undefined) {
+      // Only set linkSort if we have a specific value (function or null)
+      // Leaving linkSort unset (undefined) lets d3-sankey use its internal algorithm
       sankeyGenerator.linkSort(linkSortFn);
     }
 
