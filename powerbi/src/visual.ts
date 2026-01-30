@@ -74,10 +74,12 @@ interface VisualSettings {
   linkLabelFontSize: number;
   labelFontSize: number;
   labelColor: string;
+  labelFontFamily: string;
   showLabels: boolean;
   showDataLabels: boolean;
   dataLabelFontSize: number;
   dataLabelColor: string;
+  dataLabelFontFamily: string;
 }
 
 const DEFAULT_SETTINGS: VisualSettings = {
@@ -91,10 +93,12 @@ const DEFAULT_SETTINGS: VisualSettings = {
   linkLabelFontSize: 10,
   labelFontSize: 12,
   labelColor: '#333333',
+  labelFontFamily: "'Segoe UI', sans-serif",
   showLabels: true,
   showDataLabels: false,
   dataLabelFontSize: 10,
   dataLabelColor: '#666666',
+  dataLabelFontFamily: "'Segoe UI', sans-serif",
 };
 
 // =============================================================================
@@ -233,10 +237,16 @@ class LabelSettingsCard extends formattingSettings.SimpleCard {
     value: { value: DEFAULT_SETTINGS.labelColor },
   });
 
+  fontFamily = new formattingSettings.FontPicker({
+    name: 'fontFamily',
+    displayName: 'Font',
+    value: DEFAULT_SETTINGS.labelFontFamily,
+  });
+
   name: string = 'labelSettings';
   displayName: string = 'Node Labels';
   topLevelSlice: formattingSettings.ToggleSwitch = this.show;
-  slices: formattingSettings.Slice[] = [this.fontSize, this.color];
+  slices: formattingSettings.Slice[] = [this.fontFamily, this.fontSize, this.color];
 }
 
 class DataLabelSettingsCard extends formattingSettings.SimpleCard {
@@ -262,10 +272,16 @@ class DataLabelSettingsCard extends formattingSettings.SimpleCard {
     value: { value: DEFAULT_SETTINGS.dataLabelColor },
   });
 
+  fontFamily = new formattingSettings.FontPicker({
+    name: 'fontFamily',
+    displayName: 'Font',
+    value: DEFAULT_SETTINGS.dataLabelFontFamily,
+  });
+
   name: string = 'dataLabelSettings';
   displayName: string = 'Node Data Labels';
   topLevelSlice: formattingSettings.ToggleSwitch = this.show;
-  slices: formattingSettings.Slice[] = [this.fontSize, this.color];
+  slices: formattingSettings.Slice[] = [this.fontFamily, this.fontSize, this.color];
 }
 
 class VisualFormattingSettingsModel extends formattingSettings.Model {
@@ -342,10 +358,12 @@ function parseSettings(dataView: DataView): VisualSettings {
     linkLabelFontSize: (linkLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.linkLabelFontSize,
     labelFontSize: (labelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.labelFontSize,
     labelColor: labelColor ?? DEFAULT_SETTINGS.labelColor,
+    labelFontFamily: (labelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.labelFontFamily,
     showLabels: (labelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLabels,
     showDataLabels: (dataLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showDataLabels,
     dataLabelFontSize: (dataLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.dataLabelFontSize,
     dataLabelColor: (dataLabelSettings?.color as { solid?: { color?: string } })?.solid?.color ?? DEFAULT_SETTINGS.dataLabelColor,
+    dataLabelFontFamily: (dataLabelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.dataLabelFontFamily,
   };
 }
 
@@ -1147,7 +1165,7 @@ export class Visual implements IVisual {
     nodeGroups: Selection<SVGGElement, ComputedNode, SVGGElement, unknown>,
     chartWidth: number
   ): void {
-    const { labelFontSize, labelColor } = this.settings;
+    const { labelFontSize, labelColor, labelFontFamily } = this.settings;
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
     const textColor = isHighContrast && hcColors ? hcColors.foreground : labelColor;
@@ -1162,7 +1180,7 @@ export class Visual implements IVisual {
       .attr('y', d => ((d.y0 ?? 0) + (d.y1 ?? 0)) / 2)
       .attr('dy', '0.35em')
       .attr('text-anchor', d => (d.x0 ?? 0) < midPoint ? 'start' : 'end')
-      .attr('font-family', 'Segoe UI, sans-serif')
+      .attr('font-family', labelFontFamily)
       .attr('font-size', labelFontSize)
       .attr('fill', textColor)
       .text(d => d.name);
@@ -1172,7 +1190,7 @@ export class Visual implements IVisual {
     nodeGroups: Selection<SVGGElement, ComputedNode, SVGGElement, unknown>,
     chartWidth: number
   ): void {
-    const { dataLabelFontSize, dataLabelColor } = this.settings;
+    const { dataLabelFontSize, dataLabelColor, dataLabelFontFamily } = this.settings;
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
     const textColor = isHighContrast && hcColors ? hcColors.foreground : dataLabelColor;
@@ -1190,7 +1208,7 @@ export class Visual implements IVisual {
       .attr('y', d => ((d.y0 ?? 0) + (d.y1 ?? 0)) / 2)
       .attr('dy', dyValue)
       .attr('text-anchor', d => (d.x0 ?? 0) < midPoint ? 'start' : 'end')
-      .attr('font-family', 'Segoe UI, sans-serif')
+      .attr('font-family', dataLabelFontFamily)
       .attr('font-size', dataLabelFontSize)
       .attr('fill', textColor)
       .text(d => (d.value ?? 0).toLocaleString());

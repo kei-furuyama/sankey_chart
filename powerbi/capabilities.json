@@ -128,6 +128,11 @@
           "displayName": "Color",
           "displayNameKey": "Visual_LabelColor",
           "type": { "fill": { "solid": { "color": true } } }
+        },
+        "fontFamily": {
+          "displayName": "Font",
+          "displayNameKey": "Visual_LabelFontFamily",
+          "type": { "formatting": { "fontFamily": true } }
         }
       }
     },
@@ -149,6 +154,11 @@
           "displayName": "Color",
           "displayNameKey": "Visual_DataLabelColor",
           "type": { "fill": { "solid": { "color": true } } }
+        },
+        "fontFamily": {
+          "displayName": "Font",
+          "displayNameKey": "Visual_DataLabelFontFamily",
+          "type": { "formatting": { "fontFamily": true } }
         }
       }
     },
