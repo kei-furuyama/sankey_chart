@@ -65,6 +65,9 @@ type ComputedLink = SankeyLink<SankeyNodeDatum, SankeyLinkDatum>;
 type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'inputOrder' | 'none';
 type NodeColorMode = 'single' | 'category';
 
+const VALID_LINK_SORT_MODES: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
+const VALID_NODE_COLOR_MODES: NodeColorMode[] = ['single', 'category'];
+
 interface VisualSettings {
   nodeWidth: number;
   nodePadding: number;
@@ -333,6 +336,21 @@ function extractDropdownValue(raw: unknown, defaultValue: string): string {
   return defaultValue;
 }
 
+/**
+ * Extract a solid color value from a Power BI fill object.
+ */
+function extractFillColor(raw: unknown): string | undefined {
+  return (raw as { solid?: { color?: string } } | undefined)?.solid?.color;
+}
+
+/**
+ * Extract and validate a dropdown value against a list of valid options.
+ */
+function extractValidatedDropdown<T extends string>(raw: unknown, validValues: T[], defaultValue: T): T {
+  const extracted = extractDropdownValue(raw, defaultValue);
+  return validValues.includes(extracted as T) ? (extracted as T) : defaultValue;
+}
+
 function parseSettings(dataView: DataView): VisualSettings {
   const objects = dataView?.metadata?.objects;
   if (!objects) {
@@ -340,42 +358,24 @@ function parseSettings(dataView: DataView): VisualSettings {
   }
 
   const { nodeSettings, linkSettings, linkLabelSettings, labelSettings, dataLabelSettings } = objects;
-  const opacityPercent = (linkSettings?.opacity as number) ?? 50;
-
-  // Extract color from fill object if present
-  const nodeColor = (nodeSettings?.defaultColor as { solid?: { color?: string } })?.solid?.color;
-  const labelColor = (labelSettings?.color as { solid?: { color?: string } })?.solid?.color;
-
-  // Parse linkSort mode - ItemDropdown values can be objects
-  const linkSortValue = extractDropdownValue(linkSettings?.sortMode, DEFAULT_SETTINGS.linkSort);
-  const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
-  const linkSort: LinkSortMode = validLinkSortModes.includes(linkSortValue as LinkSortMode)
-    ? (linkSortValue as LinkSortMode)
-    : DEFAULT_SETTINGS.linkSort;
-  const nodeColorModeValue = extractDropdownValue(nodeSettings?.colorMode, DEFAULT_SETTINGS.nodeColorMode);
-  const validNodeColorModes: NodeColorMode[] = ['single', 'category'];
-  const nodeColorMode: NodeColorMode = validNodeColorModes.includes(nodeColorModeValue as NodeColorMode)
-    ? (nodeColorModeValue as NodeColorMode)
-    : DEFAULT_SETTINGS.nodeColorMode;
 
   return {
     nodeWidth: (nodeSettings?.width as number) ?? DEFAULT_SETTINGS.nodeWidth,
     nodePadding: (nodeSettings?.padding as number) ?? DEFAULT_SETTINGS.nodePadding,
-    nodeDefaultColor: nodeColor ?? DEFAULT_SETTINGS.nodeDefaultColor,
-    nodeColorMode,
-    linkOpacity: opacityPercent / 100,
+    nodeDefaultColor: extractFillColor(nodeSettings?.defaultColor) ?? DEFAULT_SETTINGS.nodeDefaultColor,
+    nodeColorMode: extractValidatedDropdown(nodeSettings?.colorMode, VALID_NODE_COLOR_MODES, DEFAULT_SETTINGS.nodeColorMode),
+    linkOpacity: ((linkSettings?.opacity as number) ?? 50) / 100,
     linkColorMode: extractDropdownValue(linkSettings?.colorMode, DEFAULT_SETTINGS.linkColorMode),
-    linkSort,
-    // Link Labels settings now come from linkLabelSettings object
+    linkSort: extractValidatedDropdown(linkSettings?.sortMode, VALID_LINK_SORT_MODES, DEFAULT_SETTINGS.linkSort),
     showLinkLabels: (linkLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLinkLabels,
     linkLabelFontSize: (linkLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.linkLabelFontSize,
     labelFontSize: (labelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.labelFontSize,
-    labelColor: labelColor ?? DEFAULT_SETTINGS.labelColor,
+    labelColor: extractFillColor(labelSettings?.color) ?? DEFAULT_SETTINGS.labelColor,
     labelFontFamily: (labelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.labelFontFamily,
     showLabels: (labelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLabels,
     showDataLabels: (dataLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showDataLabels,
     dataLabelFontSize: (dataLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.dataLabelFontSize,
-    dataLabelColor: (dataLabelSettings?.color as { solid?: { color?: string } })?.solid?.color ?? DEFAULT_SETTINGS.dataLabelColor,
+    dataLabelColor: extractFillColor(dataLabelSettings?.color) ?? DEFAULT_SETTINGS.dataLabelColor,
     dataLabelFontFamily: (dataLabelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.dataLabelFontFamily,
   };
 }
@@ -487,18 +487,13 @@ function transformDataView(options: TransformDataViewOptions): SankeyData | null
 
   // Build a map of node id -> user-specified color from per-row objects (nodeColors.fill)
   const userColorMap = new Map<string, string>();
-  const columns = [sourceColumn, targetColumn];
-  for (const col of columns) {
+  for (const col of [sourceColumn, targetColumn]) {
     if (!col?.objects) continue;
     for (let i = 0; i < col.values.length; i++) {
-      const obj = col.objects[i];
-      if (!obj) continue;
-      const fill = (obj['nodeColors'] as { fill?: { solid?: { color?: string } } } | undefined)?.fill?.solid?.color;
-      if (fill) {
-        const nodeId = String(col.values[i] ?? '');
-        if (nodeId) {
-          userColorMap.set(nodeId, fill);
-        }
+      const fill = extractFillColor(col.objects[i]?.['nodeColors']?.fill);
+      const nodeId = String(col.values[i] ?? '');
+      if (fill && nodeId) {
+        userColorMap.set(nodeId, fill);
       }
     }
   }
@@ -860,28 +855,11 @@ export class Visual implements IVisual {
           dataView
         );
 
-        // Read ItemDropdown values directly from formattingSettings (more reliable)
-        const sortModeValue = this.formattingSettings.linkSettingsCard.sortMode.value;
-        const colorModeValue = this.formattingSettings.linkSettingsCard.colorMode.value;
-
-        // Override parseSettings values with formattingSettings values
-        const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
-        const extractedSortMode = extractDropdownValue(sortModeValue, this.settings.linkSort);
-        if (validLinkSortModes.includes(extractedSortMode as LinkSortMode)) {
-          this.settings.linkSort = extractedSortMode as LinkSortMode;
-        }
-        const extractedColorMode = extractDropdownValue(colorModeValue, this.settings.linkColorMode);
-        if (extractedColorMode) {
-          this.settings.linkColorMode = extractedColorMode;
-        }
-
-        // Override nodeColorMode from formattingSettings
-        const nodeColorModeValue = this.formattingSettings.nodeSettingsCard.colorMode.value;
-        const extractedNodeColorMode = extractDropdownValue(nodeColorModeValue, this.settings.nodeColorMode);
-        const validNodeColorModes: NodeColorMode[] = ['single', 'category'];
-        if (validNodeColorModes.includes(extractedNodeColorMode as NodeColorMode)) {
-          this.settings.nodeColorMode = extractedNodeColorMode as NodeColorMode;
-        }
+        // Override dropdown values from formattingSettings (more reliable than dataView objects)
+        const { linkSettingsCard, nodeSettingsCard } = this.formattingSettings;
+        this.settings.linkSort = extractValidatedDropdown(linkSettingsCard.sortMode.value, VALID_LINK_SORT_MODES, this.settings.linkSort);
+        this.settings.linkColorMode = extractDropdownValue(linkSettingsCard.colorMode.value, this.settings.linkColorMode);
+        this.settings.nodeColorMode = extractValidatedDropdown(nodeSettingsCard.colorMode.value, VALID_NODE_COLOR_MODES, this.settings.nodeColorMode);
       }
 
       this.svg
