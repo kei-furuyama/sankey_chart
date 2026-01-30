@@ -858,11 +858,15 @@ export class Visual implements IVisual {
       if (!data || data.nodes.length === 0) {
         this.currentNodes = [];
         this.focusedNodeIndex = -1;
-        this.svg.attr('width', 0).attr('height', 0);
+        this.showLandingPage(viewport);
+        this.target.style.pointerEvents = 'none';
+        this.target.removeAttribute('tabindex');
         this.eventService.renderingFinished(options);
         return;
       }
 
+      this.target.style.pointerEvents = '';
+      this.target.setAttribute('tabindex', '0');
       this.valueMeasureName = data.valueMeasureName;
       this.renderSankey(data, viewport);
 
@@ -1259,6 +1263,89 @@ export class Visual implements IVisual {
       .attr('font-size', dataLabelFontSize)
       .attr('fill', textColor)
       .text(d => (d.value ?? 0).toLocaleString());
+  }
+
+  /**
+   * Show landing page when no data is available
+   */
+  private showLandingPage(viewport: IViewport): void {
+    const isHighContrast = this.isHighContrastMode;
+    const hcColors = this.highContrastColors;
+    const textColor = isHighContrast && hcColors ? hcColors.foreground : '#333';
+    const subtextColor = isHighContrast && hcColors ? hcColors.foreground : '#666';
+    const iconColor = isHighContrast && hcColors ? hcColors.foreground : '#0078d4';
+
+    const centerX = viewport.width / 2;
+    const centerY = viewport.height / 2;
+
+    const landingGroup = this.svg.append('g')
+      .attr('class', 'landing-page')
+      .attr('transform', `translate(${centerX}, ${centerY})`);
+
+    // Sankey diagram icon (simplified flow diagram)
+    const iconGroup = landingGroup.append('g')
+      .attr('transform', 'translate(0, -60)');
+
+    // Left nodes
+    iconGroup.append('rect')
+      .attr('x', -40).attr('y', -20).attr('width', 8).attr('height', 15)
+      .attr('fill', iconColor).attr('rx', 2);
+    iconGroup.append('rect')
+      .attr('x', -40).attr('y', 5).attr('width', 8).attr('height', 15)
+      .attr('fill', iconColor).attr('rx', 2);
+
+    // Right node
+    iconGroup.append('rect')
+      .attr('x', 32).attr('y', -10).attr('width', 8).attr('height', 20)
+      .attr('fill', iconColor).attr('rx', 2);
+
+    // Flow paths
+    iconGroup.append('path')
+      .attr('d', 'M-30,-12 C0,-12 0,0 30,0')
+      .attr('fill', 'none')
+      .attr('stroke', iconColor)
+      .attr('stroke-width', 6)
+      .attr('stroke-opacity', 0.4);
+
+    iconGroup.append('path')
+      .attr('d', 'M-30,12 C0,12 0,0 30,0')
+      .attr('fill', 'none')
+      .attr('stroke', iconColor)
+      .attr('stroke-width', 4)
+      .attr('stroke-opacity', 0.4);
+
+    // Title
+    landingGroup.append('text')
+      .attr('y', 10)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'Segoe UI, sans-serif')
+      .attr('font-size', '16px')
+      .attr('font-weight', '600')
+      .attr('fill', textColor)
+      .text('Sankey Chart');
+
+    // Instructions
+    const instructions = [
+      'To get started, add data fields:',
+      '',
+      'Source \u2013 Origin node name',
+      'Target \u2013 Destination node name',
+      'Value \u2013 Flow quantity (optional)',
+    ];
+
+    const instructionGroup = landingGroup.append('g')
+      .attr('transform', 'translate(0, 35)');
+
+    instructions.forEach((text, i) => {
+      instructionGroup.append('text')
+        .attr('y', i * 18)
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'Segoe UI, sans-serif')
+        .attr('font-size', i === 0 ? '13px' : '12px')
+        .attr('font-weight', i === 0 ? '500' : '400')
+        .attr('fill', i === 0 ? textColor : subtextColor)
+        .text(text);
+    });
   }
 }
 
