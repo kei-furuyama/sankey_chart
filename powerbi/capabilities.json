@@ -195,6 +195,32 @@
           "type": { "numeric": true }
         }
       }
+    },
+    "marginSettings": {
+      "displayName": "Margins",
+      "displayNameKey": "Visual_Margins",
+      "properties": {
+        "top": {
+          "displayName": "Top",
+          "displayNameKey": "Visual_MarginTop",
+          "type": { "numeric": true }
+        },
+        "right": {
+          "displayName": "Right",
+          "displayNameKey": "Visual_MarginRight",
+          "type": { "numeric": true }
+        },
+        "bottom": {
+          "displayName": "Bottom",
+          "displayNameKey": "Visual_MarginBottom",
+          "type": { "numeric": true }
+        },
+        "left": {
+          "displayName": "Left",
+          "displayNameKey": "Visual_MarginLeft",
+          "type": { "numeric": true }
+        }
+      }
     }
   },
   "privileges": [],

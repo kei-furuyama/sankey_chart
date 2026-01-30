@@ -8,6 +8,7 @@
 import powerbi from 'powerbi-visuals-api';
 import { sankey, sankeyLinkHorizontal, SankeyNode, SankeyLink } from 'd3-sankey';
 import { select, Selection } from 'd3';
+import 'd3-transition';
 
 import {
   formattingSettings,
@@ -86,6 +87,12 @@ interface VisualSettings {
   dataLabelFontSize: number;
   dataLabelColor: string;
   dataLabelFontFamily: string;
+  animationEnabled: boolean;
+  animationDuration: number;
+  marginTop: number;
+  marginRight: number;
+  marginBottom: number;
+  marginLeft: number;
 }
 
 const DEFAULT_SETTINGS: VisualSettings = {
@@ -106,6 +113,12 @@ const DEFAULT_SETTINGS: VisualSettings = {
   dataLabelFontSize: 10,
   dataLabelColor: '#666666',
   dataLabelFontFamily: "'Segoe UI', sans-serif",
+  animationEnabled: false,
+  animationDuration: 500,
+  marginTop: 20,
+  marginRight: 120,
+  marginBottom: 20,
+  marginLeft: 120,
 };
 
 // =============================================================================
@@ -301,12 +314,83 @@ class DataLabelSettingsCard extends formattingSettings.SimpleCard {
   slices: formattingSettings.Slice[] = [this.fontFamily, this.fontSize, this.color];
 }
 
+class AnimationSettingsCard extends formattingSettings.SimpleCard {
+  show = new formattingSettings.ToggleSwitch({
+    name: 'enabled',
+    displayName: 'Enable Animation',
+    value: DEFAULT_SETTINGS.animationEnabled,
+  });
+
+  duration = new formattingSettings.NumUpDown({
+    name: 'duration',
+    displayName: 'Duration (ms)',
+    value: DEFAULT_SETTINGS.animationDuration,
+    options: {
+      minValue: { value: 100, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 3000, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
+  name: string = 'animationSettings';
+  displayName: string = 'Animation';
+  topLevelSlice: formattingSettings.ToggleSwitch = this.show;
+  slices: formattingSettings.Slice[] = [this.duration];
+}
+
+class MarginSettingsCard extends formattingSettings.SimpleCard {
+  top = new formattingSettings.NumUpDown({
+    name: 'top',
+    displayName: 'Top',
+    value: DEFAULT_SETTINGS.marginTop,
+    options: {
+      minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 300, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
+  right = new formattingSettings.NumUpDown({
+    name: 'right',
+    displayName: 'Right',
+    value: DEFAULT_SETTINGS.marginRight,
+    options: {
+      minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 300, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
+  bottom = new formattingSettings.NumUpDown({
+    name: 'bottom',
+    displayName: 'Bottom',
+    value: DEFAULT_SETTINGS.marginBottom,
+    options: {
+      minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 300, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
+  left = new formattingSettings.NumUpDown({
+    name: 'left',
+    displayName: 'Left',
+    value: DEFAULT_SETTINGS.marginLeft,
+    options: {
+      minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 300, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
+  name: string = 'marginSettings';
+  displayName: string = 'Margins';
+  slices: formattingSettings.Slice[] = [this.top, this.right, this.bottom, this.left];
+}
+
 class VisualFormattingSettingsModel extends formattingSettings.Model {
   nodeSettingsCard = new NodeSettingsCard();
   linkSettingsCard = new LinkSettingsCard();
   linkLabelSettingsCard = new LinkLabelSettingsCard();
   labelSettingsCard = new LabelSettingsCard();
   dataLabelSettingsCard = new DataLabelSettingsCard();
+  animationSettingsCard = new AnimationSettingsCard();
+  marginSettingsCard = new MarginSettingsCard();
 
   cards: formattingSettings.SimpleCard[] = [
     this.nodeSettingsCard,
@@ -314,6 +398,8 @@ class VisualFormattingSettingsModel extends formattingSettings.Model {
     this.linkLabelSettingsCard,
     this.labelSettingsCard,
     this.dataLabelSettingsCard,
+    this.animationSettingsCard,
+    this.marginSettingsCard,
   ];
 }
 
@@ -357,7 +443,7 @@ function parseSettings(dataView: DataView): VisualSettings {
     return { ...DEFAULT_SETTINGS };
   }
 
-  const { nodeSettings, linkSettings, linkLabelSettings, labelSettings, dataLabelSettings } = objects;
+  const { nodeSettings, linkSettings, linkLabelSettings, labelSettings, dataLabelSettings, animationSettings, marginSettings } = objects;
 
   return {
     nodeWidth: (nodeSettings?.width as number) ?? DEFAULT_SETTINGS.nodeWidth,
@@ -377,6 +463,12 @@ function parseSettings(dataView: DataView): VisualSettings {
     dataLabelFontSize: (dataLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.dataLabelFontSize,
     dataLabelColor: extractFillColor(dataLabelSettings?.color) ?? DEFAULT_SETTINGS.dataLabelColor,
     dataLabelFontFamily: (dataLabelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.dataLabelFontFamily,
+    animationEnabled: (animationSettings?.enabled as boolean) ?? DEFAULT_SETTINGS.animationEnabled,
+    animationDuration: (animationSettings?.duration as number) ?? DEFAULT_SETTINGS.animationDuration,
+    marginTop: (marginSettings?.top as number) ?? DEFAULT_SETTINGS.marginTop,
+    marginRight: (marginSettings?.right as number) ?? DEFAULT_SETTINGS.marginRight,
+    marginBottom: (marginSettings?.bottom as number) ?? DEFAULT_SETTINGS.marginBottom,
+    marginLeft: (marginSettings?.left as number) ?? DEFAULT_SETTINGS.marginLeft,
   };
 }
 
@@ -887,7 +979,8 @@ export class Visual implements IVisual {
       this.target.style.pointerEvents = '';
       this.target.setAttribute('tabindex', '0');
       this.valueMeasureName = data.valueMeasureName;
-      this.renderSankey(data, viewport);
+      const skipAnimation = (options.type & VisualUpdateType.Resize) !== 0;
+      this.renderSankey(data, viewport, skipAnimation);
 
       // Signal rendering finished
       this.eventService.renderingFinished(options);
@@ -897,8 +990,13 @@ export class Visual implements IVisual {
     }
   }
 
-  private renderSankey(data: SankeyData, viewport: IViewport): void {
-    const margin = { top: 20, right: 120, bottom: 20, left: 120 };
+  private renderSankey(data: SankeyData, viewport: IViewport, skipAnimation: boolean = false): void {
+    const margin = {
+      top: this.settings.marginTop,
+      right: this.settings.marginRight,
+      bottom: this.settings.marginBottom,
+      left: this.settings.marginLeft,
+    };
     const width = viewport.width - margin.left - margin.right;
     const height = viewport.height - margin.top - margin.bottom;
 
@@ -940,13 +1038,17 @@ export class Visual implements IVisual {
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    this.renderLinks(g, graph.links);
-    this.renderNodes(g, graph.nodes, width);
+    const animate = this.settings.animationEnabled && !skipAnimation;
+    const animDuration = this.settings.animationDuration;
+    this.renderLinks(g, graph.links, animate, animDuration);
+    this.renderNodes(g, graph.nodes, width, animate, animDuration);
   }
 
   private renderLinks(
     container: Selection<SVGGElement, unknown, null, undefined>,
-    links: ComputedLink[]
+    links: ComputedLink[],
+    animate: boolean = false,
+    animDuration: number = 500
   ): void {
     const linkPath = sankeyLinkHorizontal<ComputedNode, ComputedLink>();
     const { linkOpacity, linkColorMode } = this.settings;
@@ -954,12 +1056,35 @@ export class Visual implements IVisual {
     const selectionManager = this.selectionManager;
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
+    const isGradient = linkColorMode === 'gradient' && !isHighContrast;
 
-    const getLinkColor = (d: ComputedLink): string => {
+    // Add gradient defs if gradient mode
+    if (isGradient) {
+      const defs = container.append('defs');
+      links.forEach((link, i) => {
+        const gradient = defs.append('linearGradient')
+          .attr('id', `gradient-${i}`)
+          .attr('gradientUnits', 'userSpaceOnUse')
+          .attr('x1', (link.source as ComputedNode).x1 ?? 0)
+          .attr('y1', 0)
+          .attr('x2', (link.target as ComputedNode).x0 ?? 0)
+          .attr('y2', 0);
+        gradient.append('stop')
+          .attr('offset', '0%')
+          .attr('stop-color', (link.source as ComputedNode).color ?? '#aaa');
+        gradient.append('stop')
+          .attr('offset', '100%')
+          .attr('stop-color', (link.target as ComputedNode).color ?? '#aaa');
+      });
+    }
+
+    const getLinkColor = (d: ComputedLink, i: number): string => {
       if (isHighContrast && hcColors) {
         return hcColors.foreground;
       }
       switch (linkColorMode) {
+        case 'gradient':
+          return `url(#gradient-${i})`;
         case 'target':
           return (d.target as ComputedNode).color ?? '#aaa';
         case 'fixed':
@@ -970,7 +1095,9 @@ export class Visual implements IVisual {
       }
     };
 
-    container.append('g')
+    const finalOpacity = isHighContrast ? 0.8 : linkOpacity;
+
+    const paths = container.append('g')
       .classed('links', true)
       .selectAll('path')
       .data(links)
@@ -978,9 +1105,15 @@ export class Visual implements IVisual {
       .append('path')
       .attr('d', linkPath)
       .attr('fill', 'none')
-      .attr('stroke', getLinkColor)
+      .attr('stroke', (d, i) => getLinkColor(d, i))
       .attr('stroke-width', d => Math.max(1, d.width ?? 1))
-      .attr('stroke-opacity', isHighContrast ? 0.8 : linkOpacity)
+      .attr('stroke-opacity', animate ? 0 : finalOpacity);
+
+    if (animate) {
+      (paths as any).transition().duration(animDuration).attr('stroke-opacity', finalOpacity);
+    }
+
+    paths
       .style('cursor', 'pointer')
       .on('click', (event: MouseEvent, d: ComputedLink) => {
         // Handle click selection for links (only if interactions allowed)
@@ -1122,7 +1255,9 @@ export class Visual implements IVisual {
   private renderNodes(
     container: Selection<SVGGElement, unknown, null, undefined>,
     nodes: ComputedNode[],
-    chartWidth: number
+    chartWidth: number,
+    animate: boolean = false,
+    animDuration: number = 500
   ): void {
     const tooltipService = this.tooltipService;
     const selectionManager = this.selectionManager;
@@ -1145,7 +1280,7 @@ export class Visual implements IVisual {
       .append('g')
       .style('cursor', 'pointer');
 
-    nodeGroups.append('rect')
+    const rects = nodeGroups.append('rect')
       .attr('x', d => d.x0 ?? 0)
       .attr('y', d => d.y0 ?? 0)
       .attr('width', d => (d.x1 ?? 0) - (d.x0 ?? 0))
@@ -1153,7 +1288,13 @@ export class Visual implements IVisual {
       .attr('fill', getNodeColor)
       .attr('stroke', isHighContrast && hcColors ? hcColors.foreground : 'none')
       .attr('stroke-width', isHighContrast ? 1 : 0)
-      .on('click', (event: MouseEvent, d: ComputedNode) => {
+      .style('opacity', animate ? 0 : 1);
+
+    if (animate) {
+      (rects as any).transition().duration(animDuration).style('opacity', 1);
+    }
+
+    rects.on('click', (event: MouseEvent, d: ComputedNode) => {
         // Handle click selection for nodes (only if interactions allowed)
         if (!this.allowInteractions) return;
         if (d.selectionId) {
