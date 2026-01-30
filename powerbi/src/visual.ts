@@ -55,6 +55,8 @@ interface SankeyData {
 interface TransformDataViewOptions {
   dataView: DataView | undefined;
   host: IVisualHost;
+  nodeColorMode?: NodeColorMode;
+  nodeDefaultColor?: string;
 }
 
 type ComputedNode = SankeyNode<SankeyNodeDatum, SankeyLinkDatum>;
@@ -63,11 +65,13 @@ type ComputedLink = SankeyLink<SankeyNodeDatum, SankeyLinkDatum>;
 // Settings
 
 type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'inputOrder' | 'none';
+type NodeColorMode = 'single' | 'category';
 
 interface VisualSettings {
   nodeWidth: number;
   nodePadding: number;
   nodeDefaultColor: string;
+  nodeColorMode: NodeColorMode;
   linkOpacity: number;
   linkColorMode: string;
   linkSort: LinkSortMode;
@@ -87,6 +91,7 @@ const DEFAULT_SETTINGS: VisualSettings = {
   nodeWidth: 24,
   nodePadding: 16,
   nodeDefaultColor: '#1f77b4',
+  nodeColorMode: 'category',
   linkOpacity: 0.5,
   linkColorMode: 'source',
   linkSort: 'ascending',
@@ -127,6 +132,16 @@ class NodeSettingsCard extends formattingSettings.SimpleCard {
     },
   });
 
+  colorMode = new formattingSettings.ItemDropdown({
+    name: 'colorMode',
+    displayName: 'Color Mode',
+    items: [
+      { value: 'category', displayName: 'Category Colors' },
+      { value: 'single', displayName: 'Single Color' },
+    ],
+    value: { value: 'category', displayName: 'Category Colors' },
+  });
+
   defaultColor = new formattingSettings.ColorPicker({
     name: 'defaultColor',
     displayName: 'Default Color',
@@ -135,7 +150,7 @@ class NodeSettingsCard extends formattingSettings.SimpleCard {
 
   name: string = 'nodeSettings';
   displayName: string = 'Nodes';
-  slices: formattingSettings.Slice[] = [this.width, this.padding, this.defaultColor];
+  slices: formattingSettings.Slice[] = [this.width, this.padding, this.colorMode, this.defaultColor];
 }
 
 class LinkSettingsCard extends formattingSettings.SimpleCard {
@@ -347,10 +362,17 @@ function parseSettings(dataView: DataView): VisualSettings {
     : DEFAULT_SETTINGS.linkSort;
   console.log('[parseSettings] final linkSort:', linkSort);
 
+  const nodeColorModeValue = extractDropdownValue(nodeSettings?.colorMode, DEFAULT_SETTINGS.nodeColorMode);
+  const validNodeColorModes: NodeColorMode[] = ['single', 'category'];
+  const nodeColorMode: NodeColorMode = validNodeColorModes.includes(nodeColorModeValue as NodeColorMode)
+    ? (nodeColorModeValue as NodeColorMode)
+    : DEFAULT_SETTINGS.nodeColorMode;
+
   return {
     nodeWidth: (nodeSettings?.width as number) ?? DEFAULT_SETTINGS.nodeWidth,
     nodePadding: (nodeSettings?.padding as number) ?? DEFAULT_SETTINGS.nodePadding,
     nodeDefaultColor: nodeColor ?? DEFAULT_SETTINGS.nodeDefaultColor,
+    nodeColorMode,
     linkOpacity: opacityPercent / 100,
     linkColorMode: extractDropdownValue(linkSettings?.colorMode, DEFAULT_SETTINGS.linkColorMode),
     linkSort,
@@ -471,12 +493,14 @@ function transformDataView(options: TransformDataViewOptions): SankeyData | null
   }
 
   const colorScale = scaleOrdinal<string>(schemeCategory10);
+  const colorMode = options.nodeColorMode ?? 'category';
+  const defaultColor = options.nodeDefaultColor ?? '#1f77b4';
 
   // Create nodes with first selection ID (for cross-filtering by node)
   const nodes: SankeyNodeDatum[] = Array.from(nodeMap.entries()).map(([id, data]) => ({
     id,
     name: id,
-    color: colorScale(id),
+    color: colorMode === 'single' ? defaultColor : colorScale(id),
     selectionId: data.selectionIds[0], // Use first selectionId for the node
   }));
 
@@ -803,6 +827,14 @@ export class Visual implements IVisual {
           this.settings.linkColorMode = extractedColorMode;
           console.log('[update] Overriding linkColorMode from formattingSettings:', extractedColorMode);
         }
+
+        // Override nodeColorMode from formattingSettings
+        const nodeColorModeValue = this.formattingSettings.nodeSettingsCard.colorMode.value;
+        const extractedNodeColorMode = extractDropdownValue(nodeColorModeValue, this.settings.nodeColorMode);
+        const validNodeColorModes: NodeColorMode[] = ['single', 'category'];
+        if (validNodeColorModes.includes(extractedNodeColorMode as NodeColorMode)) {
+          this.settings.nodeColorMode = extractedNodeColorMode as NodeColorMode;
+        }
       }
 
       this.svg
@@ -811,7 +843,12 @@ export class Visual implements IVisual {
 
       this.svg.selectAll('*').remove();
 
-      const data = transformDataView({ dataView, host: this.host });
+      const data = transformDataView({
+        dataView,
+        host: this.host,
+        nodeColorMode: this.settings.nodeColorMode,
+        nodeDefaultColor: this.settings.nodeDefaultColor,
+      });
       if (!data || data.nodes.length === 0) {
         this.currentNodes = [];
         this.focusedNodeIndex = -1;
@@ -951,7 +988,7 @@ export class Visual implements IVisual {
         const targetName = (d.target as ComputedNode).name;
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Flow', 'Flow'), value: `${sourceName} → ${targetName}` },
-          { displayName: this.valueMeasureName, value: String(d.value ?? 0) },
+          { displayName: this.valueMeasureName, value: (d.value ?? 0).toLocaleString() },
         ];
         tooltipService.show({
           dataItems: tooltipData,
@@ -1125,14 +1162,14 @@ export class Visual implements IVisual {
 
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Node', 'Node'), value: d.name },
-          { displayName: `${this.valueMeasureName} (Total)`, value: String(totalValue) },
+          { displayName: `${this.valueMeasureName} (Total)`, value: totalValue.toLocaleString() },
         ];
 
         if (inflow > 0) {
-          tooltipData.push({ displayName: this.getLocalizedString('Visual_Tooltip_Inflow', 'Inflow'), value: String(inflow) });
+          tooltipData.push({ displayName: this.getLocalizedString('Visual_Tooltip_Inflow', 'Inflow'), value: inflow.toLocaleString() });
         }
         if (outflow > 0) {
-          tooltipData.push({ displayName: this.getLocalizedString('Visual_Tooltip_Outflow', 'Outflow'), value: String(outflow) });
+          tooltipData.push({ displayName: this.getLocalizedString('Visual_Tooltip_Outflow', 'Outflow'), value: outflow.toLocaleString() });
         }
 
         tooltipService.show({
