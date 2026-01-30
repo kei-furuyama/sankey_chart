@@ -49,6 +49,7 @@ interface SankeyLinkDatum {
 interface SankeyData {
   nodes: SankeyNodeDatum[];
   links: SankeyLinkDatum[];
+  valueMeasureName: string;
 }
 
 interface TransformDataViewOptions {
@@ -482,6 +483,7 @@ function transformDataView(options: TransformDataViewOptions): SankeyData | null
   return {
     nodes,
     links: Array.from(linkMap.values()),
+    valueMeasureName: valueColumn?.source.displayName ?? 'Value',
   };
 }
 
@@ -508,6 +510,7 @@ export class Visual implements IVisual {
   // Keyboard navigation state
   private focusedNodeIndex: number = -1;
   private currentNodes: ComputedNode[] = [];
+  private valueMeasureName: string = 'Value';
 
   // Interaction state
   private allowInteractions: boolean = true;
@@ -817,6 +820,7 @@ export class Visual implements IVisual {
         return;
       }
 
+      this.valueMeasureName = data.valueMeasureName;
       this.renderSankey(data, viewport);
 
       // Signal rendering finished
@@ -947,7 +951,7 @@ export class Visual implements IVisual {
         const targetName = (d.target as ComputedNode).name;
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Flow', 'Flow'), value: `${sourceName} → ${targetName}` },
-          { displayName: this.getLocalizedString('Visual_Tooltip_Value', 'Value'), value: String(d.value ?? 0) },
+          { displayName: this.valueMeasureName, value: String(d.value ?? 0) },
         ];
         tooltipService.show({
           dataItems: tooltipData,
@@ -1121,7 +1125,7 @@ export class Visual implements IVisual {
 
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Node', 'Node'), value: d.name },
-          { displayName: this.getLocalizedString('Visual_Tooltip_TotalValue', 'Total Value'), value: String(totalValue) },
+          { displayName: `${this.valueMeasureName} (Total)`, value: String(totalValue) },
         ];
 
         if (inflow > 0) {
