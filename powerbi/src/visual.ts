@@ -1283,22 +1283,12 @@ export class Visual implements IVisual {
           : '#000';
         select(event.currentTarget as SVGRectElement).attr('stroke', highlightColor).attr('stroke-width', 2);
 
-        // Calculate total inflow and outflow
-        const inflow = (d.targetLinks ?? []).reduce((sum, link) => sum + (link.value ?? 0), 0);
-        const outflow = (d.sourceLinks ?? []).reduce((sum, link) => sum + (link.value ?? 0), 0);
-        const totalValue = d.value ?? Math.max(inflow, outflow);
+        const totalValue = d.value ?? 0;
 
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Node', 'Node'), value: d.name },
           { displayName: `${this.valueMeasureName} (Total)`, value: totalValue.toLocaleString() },
         ];
-
-        if (inflow > 0) {
-          tooltipData.push({ displayName: this.getLocalizedString('Visual_Tooltip_Inflow', 'Inflow'), value: inflow.toLocaleString() });
-        }
-        if (outflow > 0) {
-          tooltipData.push({ displayName: this.getLocalizedString('Visual_Tooltip_Outflow', 'Outflow'), value: outflow.toLocaleString() });
-        }
 
         tooltipService.show({
           dataItems: tooltipData,
