@@ -62,6 +62,13 @@
           "displayNameKey": "Visual_NodePadding",
           "type": { "numeric": true }
         },
+        "colorMode": {
+          "displayName": "Color Mode",
+          "displayNameKey": "Visual_NodeColorMode",
+          "type": {
+            "enumeration": []
+          }
+        },
         "defaultColor": {
           "displayName": "Default Color",
           "displayNameKey": "Visual_DefaultColor",
