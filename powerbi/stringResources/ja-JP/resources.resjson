@@ -21,7 +21,6 @@
   "Visual_LandingPage_Source": "ソース - フローの起点ノード名",
   "Visual_LandingPage_Target": "ターゲット - フローの終点ノード名",
   "Visual_LandingPage_Value": "値 - フロー量 (任意)",
-  "Visual_LandingPage_Tip": "ヒント: Tab/矢印キーで移動、Enterで選択",
   "Visual_Tooltip_Node": "ノード",
   "Visual_Tooltip_TotalValue": "合計値",
   "Visual_Tooltip_Inflow": "流入",

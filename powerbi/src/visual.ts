@@ -859,13 +859,13 @@ export class Visual implements IVisual {
         this.currentNodes = [];
         this.focusedNodeIndex = -1;
         this.showLandingPage(viewport);
-        this.svg.style('pointer-events', 'none');
+        this.target.style.pointerEvents = 'none';
         this.eventService.renderingFinished(options);
         return;
       }
 
       this.valueMeasureName = data.valueMeasureName;
-      this.svg.style('pointer-events', 'auto');
+      this.target.style.pointerEvents = 'auto';
       this.renderSankey(data, viewport);
 
       // Signal rendering finished
@@ -1345,16 +1345,6 @@ export class Visual implements IVisual {
         .text(text);
     });
 
-    // Keyboard hint (if space permits)
-    if (viewport.height > 300) {
-      landingGroup.append('text')
-        .attr('y', 140)
-        .attr('text-anchor', 'middle')
-        .attr('font-family', 'Segoe UI, sans-serif')
-        .attr('font-size', '11px')
-        .attr('fill', subtextColor)
-        .text(this.getLocalizedString('Visual_LandingPage_Tip', 'Tip: Use Tab/Arrow keys to navigate, Enter to select'));
-    }
   }
 }
 
