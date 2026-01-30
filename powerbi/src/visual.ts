@@ -75,6 +75,7 @@ interface VisualSettings {
   labelFontSize: number;
   labelColor: string;
   showLabels: boolean;
+  showDataLabels: boolean;
 }
 
 const DEFAULT_SETTINGS: VisualSettings = {
@@ -89,6 +90,7 @@ const DEFAULT_SETTINGS: VisualSettings = {
   labelFontSize: 12,
   labelColor: '#333333',
   showLabels: true,
+  showDataLabels: false,
 };
 
 // =============================================================================
@@ -233,17 +235,32 @@ class LabelSettingsCard extends formattingSettings.SimpleCard {
   slices: formattingSettings.Slice[] = [this.fontSize, this.color];
 }
 
+class DataLabelSettingsCard extends formattingSettings.SimpleCard {
+  show = new formattingSettings.ToggleSwitch({
+    name: 'show',
+    displayName: 'Show',
+    value: DEFAULT_SETTINGS.showDataLabels,
+  });
+
+  name: string = 'dataLabelSettings';
+  displayName: string = 'Node Data Labels';
+  topLevelSlice: formattingSettings.ToggleSwitch = this.show;
+  slices: formattingSettings.Slice[] = [];
+}
+
 class VisualFormattingSettingsModel extends formattingSettings.Model {
   nodeSettingsCard = new NodeSettingsCard();
   linkSettingsCard = new LinkSettingsCard();
   linkLabelSettingsCard = new LinkLabelSettingsCard();
   labelSettingsCard = new LabelSettingsCard();
+  dataLabelSettingsCard = new DataLabelSettingsCard();
 
   cards: formattingSettings.SimpleCard[] = [
     this.nodeSettingsCard,
     this.linkSettingsCard,
     this.linkLabelSettingsCard,
     this.labelSettingsCard,
+    this.dataLabelSettingsCard,
   ];
 }
 
@@ -275,7 +292,7 @@ function parseSettings(dataView: DataView): VisualSettings {
     return { ...DEFAULT_SETTINGS };
   }
 
-  const { nodeSettings, linkSettings, linkLabelSettings, labelSettings } = objects;
+  const { nodeSettings, linkSettings, linkLabelSettings, labelSettings, dataLabelSettings } = objects;
   console.log('[parseSettings] linkSettings:', JSON.stringify(linkSettings, null, 2));
   const opacityPercent = (linkSettings?.opacity as number) ?? 50;
 
@@ -306,6 +323,7 @@ function parseSettings(dataView: DataView): VisualSettings {
     labelFontSize: (labelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.labelFontSize,
     labelColor: labelColor ?? DEFAULT_SETTINGS.labelColor,
     showLabels: (labelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLabels,
+    showDataLabels: (dataLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showDataLabels,
   };
 }
 
@@ -1097,6 +1115,10 @@ export class Visual implements IVisual {
     if (this.settings.showLabels) {
       this.renderLabels(nodeGroups, chartWidth);
     }
+
+    if (this.settings.showDataLabels) {
+      this.renderDataLabels(nodeGroups, chartWidth);
+    }
   }
 
   private renderLabels(
@@ -1122,6 +1144,34 @@ export class Visual implements IVisual {
       .attr('font-size', labelFontSize)
       .attr('fill', textColor)
       .text(d => d.name);
+  }
+
+  private renderDataLabels(
+    nodeGroups: Selection<SVGGElement, ComputedNode, SVGGElement, unknown>,
+    chartWidth: number
+  ): void {
+    const { labelFontSize, labelColor } = this.settings;
+    const isHighContrast = this.isHighContrastMode;
+    const hcColors = this.highContrastColors;
+    const textColor = isHighContrast && hcColors ? hcColors.foreground : labelColor;
+    const midPoint = chartWidth / 2;
+    const labelOffset = 6;
+    const showLabels = this.settings.showLabels;
+    // If name labels are also shown, offset the data label below
+    const dyValue = showLabels ? '1.5em' : '0.35em';
+
+    nodeGroups.append('text')
+      .attr('x', d => {
+        const isLeftSide = (d.x0 ?? 0) < midPoint;
+        return isLeftSide ? (d.x1 ?? 0) + labelOffset : (d.x0 ?? 0) - labelOffset;
+      })
+      .attr('y', d => ((d.y0 ?? 0) + (d.y1 ?? 0)) / 2)
+      .attr('dy', dyValue)
+      .attr('text-anchor', d => (d.x0 ?? 0) < midPoint ? 'start' : 'end')
+      .attr('font-family', 'Segoe UI, sans-serif')
+      .attr('font-size', labelFontSize)
+      .attr('fill', textColor)
+      .text(d => (d.value ?? 0).toLocaleString());
   }
 
   /**

@@ -131,6 +131,17 @@
         }
       }
     },
+    "dataLabelSettings": {
+      "displayName": "Node Data Labels",
+      "displayNameKey": "Visual_NodeDataLabels",
+      "properties": {
+        "show": {
+          "displayName": "Show",
+          "displayNameKey": "Visual_ShowDataLabels",
+          "type": { "bool": true }
+        }
+      }
+    },
     "animationSettings": {
       "displayName": "Animation",
       "displayNameKey": "Visual_Animation",
