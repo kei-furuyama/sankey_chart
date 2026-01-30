@@ -71,6 +71,7 @@ const VALID_NODE_COLOR_MODES: NodeColorMode[] = ['single', 'category'];
 interface VisualSettings {
   nodeWidth: number;
   nodePadding: number;
+  iterations: number;
   nodeDefaultColor: string;
   nodeColorMode: NodeColorMode;
   linkOpacity: number;
@@ -86,11 +87,16 @@ interface VisualSettings {
   dataLabelFontSize: number;
   dataLabelColor: string;
   dataLabelFontFamily: string;
+  marginTop: number;
+  marginRight: number;
+  marginBottom: number;
+  marginLeft: number;
 }
 
 const DEFAULT_SETTINGS: VisualSettings = {
   nodeWidth: 24,
   nodePadding: 16,
+  iterations: 6,
   nodeDefaultColor: '#1f77b4',
   nodeColorMode: 'category',
   linkOpacity: 0.5,
@@ -106,6 +112,10 @@ const DEFAULT_SETTINGS: VisualSettings = {
   dataLabelFontSize: 10,
   dataLabelColor: '#666666',
   dataLabelFontFamily: "'Segoe UI', sans-serif",
+  marginTop: 20,
+  marginRight: 120,
+  marginBottom: 20,
+  marginLeft: 120,
 };
 
 // =============================================================================
@@ -133,6 +143,16 @@ class NodeSettingsCard extends formattingSettings.SimpleCard {
     },
   });
 
+  iterations = new formattingSettings.NumUpDown({
+    name: 'iterations',
+    displayName: 'Layout Iterations',
+    value: DEFAULT_SETTINGS.iterations,
+    options: {
+      minValue: { value: 1, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 32, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
   colorMode = new formattingSettings.ItemDropdown({
     name: 'colorMode',
     displayName: 'Color Mode',
@@ -151,7 +171,7 @@ class NodeSettingsCard extends formattingSettings.SimpleCard {
 
   name: string = 'nodeSettings';
   displayName: string = 'Nodes';
-  slices: formattingSettings.Slice[] = [this.width, this.padding, this.colorMode, this.defaultColor];
+  slices: formattingSettings.Slice[] = [this.width, this.padding, this.iterations, this.colorMode, this.defaultColor];
 }
 
 class LinkSettingsCard extends formattingSettings.SimpleCard {
@@ -301,12 +321,59 @@ class DataLabelSettingsCard extends formattingSettings.SimpleCard {
   slices: formattingSettings.Slice[] = [this.fontFamily, this.fontSize, this.color];
 }
 
+class MarginSettingsCard extends formattingSettings.SimpleCard {
+  top = new formattingSettings.NumUpDown({
+    name: 'top',
+    displayName: 'Top',
+    value: DEFAULT_SETTINGS.marginTop,
+    options: {
+      minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 300, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
+  right = new formattingSettings.NumUpDown({
+    name: 'right',
+    displayName: 'Right',
+    value: DEFAULT_SETTINGS.marginRight,
+    options: {
+      minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 300, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
+  bottom = new formattingSettings.NumUpDown({
+    name: 'bottom',
+    displayName: 'Bottom',
+    value: DEFAULT_SETTINGS.marginBottom,
+    options: {
+      minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 300, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
+  left = new formattingSettings.NumUpDown({
+    name: 'left',
+    displayName: 'Left',
+    value: DEFAULT_SETTINGS.marginLeft,
+    options: {
+      minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 300, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
+  name: string = 'marginSettings';
+  displayName: string = 'Margins';
+  slices: formattingSettings.Slice[] = [this.top, this.right, this.bottom, this.left];
+}
+
 class VisualFormattingSettingsModel extends formattingSettings.Model {
   nodeSettingsCard = new NodeSettingsCard();
   linkSettingsCard = new LinkSettingsCard();
   linkLabelSettingsCard = new LinkLabelSettingsCard();
   labelSettingsCard = new LabelSettingsCard();
   dataLabelSettingsCard = new DataLabelSettingsCard();
+  marginSettingsCard = new MarginSettingsCard();
 
   cards: formattingSettings.SimpleCard[] = [
     this.nodeSettingsCard,
@@ -314,6 +381,7 @@ class VisualFormattingSettingsModel extends formattingSettings.Model {
     this.linkLabelSettingsCard,
     this.labelSettingsCard,
     this.dataLabelSettingsCard,
+    this.marginSettingsCard,
   ];
 }
 
@@ -357,11 +425,12 @@ function parseSettings(dataView: DataView): VisualSettings {
     return { ...DEFAULT_SETTINGS };
   }
 
-  const { nodeSettings, linkSettings, linkLabelSettings, labelSettings, dataLabelSettings } = objects;
+  const { nodeSettings, linkSettings, linkLabelSettings, labelSettings, dataLabelSettings, marginSettings } = objects;
 
   return {
     nodeWidth: (nodeSettings?.width as number) ?? DEFAULT_SETTINGS.nodeWidth,
     nodePadding: (nodeSettings?.padding as number) ?? DEFAULT_SETTINGS.nodePadding,
+    iterations: (nodeSettings?.iterations as number) ?? DEFAULT_SETTINGS.iterations,
     nodeDefaultColor: extractFillColor(nodeSettings?.defaultColor) ?? DEFAULT_SETTINGS.nodeDefaultColor,
     nodeColorMode: extractValidatedDropdown(nodeSettings?.colorMode, VALID_NODE_COLOR_MODES, DEFAULT_SETTINGS.nodeColorMode),
     linkOpacity: ((linkSettings?.opacity as number) ?? 50) / 100,
@@ -377,6 +446,10 @@ function parseSettings(dataView: DataView): VisualSettings {
     dataLabelFontSize: (dataLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.dataLabelFontSize,
     dataLabelColor: extractFillColor(dataLabelSettings?.color) ?? DEFAULT_SETTINGS.dataLabelColor,
     dataLabelFontFamily: (dataLabelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.dataLabelFontFamily,
+    marginTop: (marginSettings?.top as number) ?? DEFAULT_SETTINGS.marginTop,
+    marginRight: (marginSettings?.right as number) ?? DEFAULT_SETTINGS.marginRight,
+    marginBottom: (marginSettings?.bottom as number) ?? DEFAULT_SETTINGS.marginBottom,
+    marginLeft: (marginSettings?.left as number) ?? DEFAULT_SETTINGS.marginLeft,
   };
 }
 
@@ -777,8 +850,8 @@ export class Visual implements IVisual {
     const isSingle = this.settings.nodeColorMode === 'single';
     const card = this.formattingSettings.nodeSettingsCard;
     card.slices = isSingle
-      ? [card.width, card.padding, card.colorMode, card.defaultColor]
-      : [card.width, card.padding, card.colorMode];
+      ? [card.width, card.padding, card.iterations, card.colorMode, card.defaultColor]
+      : [card.width, card.padding, card.iterations, card.colorMode];
 
     const model = this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
 
@@ -898,7 +971,12 @@ export class Visual implements IVisual {
   }
 
   private renderSankey(data: SankeyData, viewport: IViewport): void {
-    const margin = { top: 20, right: 120, bottom: 20, left: 120 };
+    const margin = {
+      top: this.settings.marginTop,
+      right: this.settings.marginRight,
+      bottom: this.settings.marginBottom,
+      left: this.settings.marginLeft,
+    };
     const width = viewport.width - margin.left - margin.right;
     const height = viewport.height - margin.top - margin.bottom;
 
@@ -911,6 +989,7 @@ export class Visual implements IVisual {
       .nodeId(d => d.id)
       .nodeWidth(this.settings.nodeWidth)
       .nodePadding(this.settings.nodePadding)
+      .iterations(this.settings.iterations)
       .extent([[0, 0], [width, height]]);
 
     // Apply link sort function
@@ -954,12 +1033,35 @@ export class Visual implements IVisual {
     const selectionManager = this.selectionManager;
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
+    const isGradient = linkColorMode === 'gradient' && !isHighContrast;
 
-    const getLinkColor = (d: ComputedLink): string => {
+    // Add gradient defs if gradient mode
+    if (isGradient) {
+      const defs = container.append('defs');
+      links.forEach((link, i) => {
+        const gradient = defs.append('linearGradient')
+          .attr('id', `gradient-${i}`)
+          .attr('gradientUnits', 'userSpaceOnUse')
+          .attr('x1', (link.source as ComputedNode).x1 ?? 0)
+          .attr('y1', 0)
+          .attr('x2', (link.target as ComputedNode).x0 ?? 0)
+          .attr('y2', 0);
+        gradient.append('stop')
+          .attr('offset', '0%')
+          .attr('stop-color', (link.source as ComputedNode).color ?? '#aaa');
+        gradient.append('stop')
+          .attr('offset', '100%')
+          .attr('stop-color', (link.target as ComputedNode).color ?? '#aaa');
+      });
+    }
+
+    const getLinkColor = (d: ComputedLink, i: number): string => {
       if (isHighContrast && hcColors) {
         return hcColors.foreground;
       }
       switch (linkColorMode) {
+        case 'gradient':
+          return `url(#gradient-${i})`;
         case 'target':
           return (d.target as ComputedNode).color ?? '#aaa';
         case 'fixed':
@@ -970,6 +1072,8 @@ export class Visual implements IVisual {
       }
     };
 
+    const finalOpacity = isHighContrast ? 0.8 : linkOpacity;
+
     container.append('g')
       .classed('links', true)
       .selectAll('path')
@@ -978,9 +1082,9 @@ export class Visual implements IVisual {
       .append('path')
       .attr('d', linkPath)
       .attr('fill', 'none')
-      .attr('stroke', getLinkColor)
+      .attr('stroke', (d, i) => getLinkColor(d, i))
       .attr('stroke-width', d => Math.max(1, d.width ?? 1))
-      .attr('stroke-opacity', isHighContrast ? 0.8 : linkOpacity)
+      .attr('stroke-opacity', finalOpacity)
       .style('cursor', 'pointer')
       .on('click', (event: MouseEvent, d: ComputedLink) => {
         // Handle click selection for links (only if interactions allowed)
@@ -1179,22 +1283,12 @@ export class Visual implements IVisual {
           : '#000';
         select(event.currentTarget as SVGRectElement).attr('stroke', highlightColor).attr('stroke-width', 2);
 
-        // Calculate total inflow and outflow
-        const inflow = (d.targetLinks ?? []).reduce((sum, link) => sum + (link.value ?? 0), 0);
-        const outflow = (d.sourceLinks ?? []).reduce((sum, link) => sum + (link.value ?? 0), 0);
-        const totalValue = d.value ?? Math.max(inflow, outflow);
+        const totalValue = d.value ?? 0;
 
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Node', 'Node'), value: d.name },
           { displayName: `${this.valueMeasureName} (Total)`, value: totalValue.toLocaleString() },
         ];
-
-        if (inflow > 0) {
-          tooltipData.push({ displayName: this.getLocalizedString('Visual_Tooltip_Inflow', 'Inflow'), value: inflow.toLocaleString() });
-        }
-        if (outflow > 0) {
-          tooltipData.push({ displayName: this.getLocalizedString('Visual_Tooltip_Outflow', 'Outflow'), value: outflow.toLocaleString() });
-        }
 
         tooltipService.show({
           dataItems: tooltipData,

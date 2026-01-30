@@ -62,6 +62,11 @@
           "displayNameKey": "Visual_NodePadding",
           "type": { "numeric": true }
         },
+        "iterations": {
+          "displayName": "Layout Iterations",
+          "displayNameKey": "Visual_LayoutIterations",
+          "type": { "numeric": true }
+        },
         "colorMode": {
           "displayName": "Color Mode",
           "displayNameKey": "Visual_NodeColorMode",
@@ -180,18 +185,28 @@
         }
       }
     },
-    "animationSettings": {
-      "displayName": "Animation",
-      "displayNameKey": "Visual_Animation",
+    "marginSettings": {
+      "displayName": "Margins",
+      "displayNameKey": "Visual_Margins",
       "properties": {
-        "enabled": {
-          "displayName": "Enable Animation",
-          "displayNameKey": "Visual_EnableAnimation",
-          "type": { "bool": true }
+        "top": {
+          "displayName": "Top",
+          "displayNameKey": "Visual_MarginTop",
+          "type": { "numeric": true }
         },
-        "duration": {
-          "displayName": "Duration (ms)",
-          "displayNameKey": "Visual_Duration",
+        "right": {
+          "displayName": "Right",
+          "displayNameKey": "Visual_MarginRight",
+          "type": { "numeric": true }
+        },
+        "bottom": {
+          "displayName": "Bottom",
+          "displayNameKey": "Visual_MarginBottom",
+          "type": { "numeric": true }
+        },
+        "left": {
+          "displayName": "Left",
+          "displayNameKey": "Visual_MarginLeft",
           "type": { "numeric": true }
         }
       }
