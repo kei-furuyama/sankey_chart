@@ -7,7 +7,7 @@
 
 import powerbi from 'powerbi-visuals-api';
 import { sankey, sankeyLinkHorizontal, SankeyNode, SankeyLink } from 'd3-sankey';
-import { select, Selection, pointer } from 'd3';
+import { select, Selection } from 'd3';
 
 import {
   formattingSettings,
@@ -335,15 +335,11 @@ function extractDropdownValue(raw: unknown, defaultValue: string): string {
 
 function parseSettings(dataView: DataView): VisualSettings {
   const objects = dataView?.metadata?.objects;
-  console.log('[parseSettings] objects:', JSON.stringify(objects, null, 2));
-
   if (!objects) {
-    console.log('[parseSettings] No objects, using defaults');
     return { ...DEFAULT_SETTINGS };
   }
 
   const { nodeSettings, linkSettings, linkLabelSettings, labelSettings, dataLabelSettings } = objects;
-  console.log('[parseSettings] linkSettings:', JSON.stringify(linkSettings, null, 2));
   const opacityPercent = (linkSettings?.opacity as number) ?? 50;
 
   // Extract color from fill object if present
@@ -351,15 +347,11 @@ function parseSettings(dataView: DataView): VisualSettings {
   const labelColor = (labelSettings?.color as { solid?: { color?: string } })?.solid?.color;
 
   // Parse linkSort mode - ItemDropdown values can be objects
-  console.log('[parseSettings] sortMode raw:', linkSettings?.sortMode);
   const linkSortValue = extractDropdownValue(linkSettings?.sortMode, DEFAULT_SETTINGS.linkSort);
-  console.log('[parseSettings] linkSortValue after extract:', linkSortValue);
   const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
   const linkSort: LinkSortMode = validLinkSortModes.includes(linkSortValue as LinkSortMode)
     ? (linkSortValue as LinkSortMode)
     : DEFAULT_SETTINGS.linkSort;
-  console.log('[parseSettings] final linkSort:', linkSort);
-
   const nodeColorModeValue = extractDropdownValue(nodeSettings?.colorMode, DEFAULT_SETTINGS.nodeColorMode);
   const validNodeColorModes: NodeColorMode[] = ['single', 'category'];
   const nodeColorMode: NodeColorMode = validNodeColorModes.includes(nodeColorModeValue as NodeColorMode)
@@ -871,20 +863,16 @@ export class Visual implements IVisual {
         // Read ItemDropdown values directly from formattingSettings (more reliable)
         const sortModeValue = this.formattingSettings.linkSettingsCard.sortMode.value;
         const colorModeValue = this.formattingSettings.linkSettingsCard.colorMode.value;
-        console.log('[update] formattingSettings sortMode.value:', sortModeValue);
-        console.log('[update] formattingSettings colorMode.value:', colorModeValue);
 
         // Override parseSettings values with formattingSettings values
         const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
         const extractedSortMode = extractDropdownValue(sortModeValue, this.settings.linkSort);
         if (validLinkSortModes.includes(extractedSortMode as LinkSortMode)) {
           this.settings.linkSort = extractedSortMode as LinkSortMode;
-          console.log('[update] Overriding linkSort from formattingSettings:', extractedSortMode);
         }
         const extractedColorMode = extractDropdownValue(colorModeValue, this.settings.linkColorMode);
         if (extractedColorMode) {
           this.settings.linkColorMode = extractedColorMode;
-          console.log('[update] Overriding linkColorMode from formattingSettings:', extractedColorMode);
         }
 
         // Override nodeColorMode from formattingSettings
@@ -952,14 +940,9 @@ export class Visual implements IVisual {
     // - undefined: use d3-sankey's internal crossing-minimization (don't call linkSort at all)
     // - null: disable all sorting (explicit null)
     // - function: use custom comparator
-    console.log('[renderSankey] this.settings.linkSort:', this.settings.linkSort);
     const linkSortFn = getLinkSortFunction(this.settings.linkSort);
-    console.log('[renderSankey] linkSortFn:', linkSortFn);
     if (linkSortFn !== undefined) {
-      console.log('[renderSankey] Calling sankeyGenerator.linkSort()');
       sankeyGenerator.linkSort(linkSortFn);
-    } else {
-      console.log('[renderSankey] NOT calling linkSort (using d3 default)');
     }
 
     // inputOrder: preserve data order for nodes by disabling d3's node reordering
