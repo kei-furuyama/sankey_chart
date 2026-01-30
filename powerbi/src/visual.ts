@@ -850,8 +850,8 @@ export class Visual implements IVisual {
     const isSingle = this.settings.nodeColorMode === 'single';
     const card = this.formattingSettings.nodeSettingsCard;
     card.slices = isSingle
-      ? [card.width, card.padding, card.colorMode, card.defaultColor]
-      : [card.width, card.padding, card.colorMode];
+      ? [card.width, card.padding, card.iterations, card.colorMode, card.defaultColor]
+      : [card.width, card.padding, card.iterations, card.colorMode];
 
     const model = this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
 
