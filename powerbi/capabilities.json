@@ -180,22 +180,6 @@
         }
       }
     },
-    "animationSettings": {
-      "displayName": "Animation",
-      "displayNameKey": "Visual_Animation",
-      "properties": {
-        "enabled": {
-          "displayName": "Enable Animation",
-          "displayNameKey": "Visual_EnableAnimation",
-          "type": { "bool": true }
-        },
-        "duration": {
-          "displayName": "Duration (ms)",
-          "displayNameKey": "Visual_Duration",
-          "type": { "numeric": true }
-        }
-      }
-    },
     "marginSettings": {
       "displayName": "Margins",
       "displayNameKey": "Visual_Margins",

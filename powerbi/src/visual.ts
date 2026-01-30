@@ -8,7 +8,6 @@
 import powerbi from 'powerbi-visuals-api';
 import { sankey, sankeyLinkHorizontal, SankeyNode, SankeyLink } from 'd3-sankey';
 import { select, Selection } from 'd3';
-import 'd3-transition';
 
 import {
   formattingSettings,
@@ -87,8 +86,6 @@ interface VisualSettings {
   dataLabelFontSize: number;
   dataLabelColor: string;
   dataLabelFontFamily: string;
-  animationEnabled: boolean;
-  animationDuration: number;
   marginTop: number;
   marginRight: number;
   marginBottom: number;
@@ -113,8 +110,6 @@ const DEFAULT_SETTINGS: VisualSettings = {
   dataLabelFontSize: 10,
   dataLabelColor: '#666666',
   dataLabelFontFamily: "'Segoe UI', sans-serif",
-  animationEnabled: false,
-  animationDuration: 500,
   marginTop: 20,
   marginRight: 120,
   marginBottom: 20,
@@ -314,29 +309,6 @@ class DataLabelSettingsCard extends formattingSettings.SimpleCard {
   slices: formattingSettings.Slice[] = [this.fontFamily, this.fontSize, this.color];
 }
 
-class AnimationSettingsCard extends formattingSettings.SimpleCard {
-  show = new formattingSettings.ToggleSwitch({
-    name: 'enabled',
-    displayName: 'Enable Animation',
-    value: DEFAULT_SETTINGS.animationEnabled,
-  });
-
-  duration = new formattingSettings.NumUpDown({
-    name: 'duration',
-    displayName: 'Duration (ms)',
-    value: DEFAULT_SETTINGS.animationDuration,
-    options: {
-      minValue: { value: 100, type: powerbi.visuals.ValidatorType.Min },
-      maxValue: { value: 3000, type: powerbi.visuals.ValidatorType.Max },
-    },
-  });
-
-  name: string = 'animationSettings';
-  displayName: string = 'Animation';
-  topLevelSlice: formattingSettings.ToggleSwitch = this.show;
-  slices: formattingSettings.Slice[] = [this.duration];
-}
-
 class MarginSettingsCard extends formattingSettings.SimpleCard {
   top = new formattingSettings.NumUpDown({
     name: 'top',
@@ -389,7 +361,6 @@ class VisualFormattingSettingsModel extends formattingSettings.Model {
   linkLabelSettingsCard = new LinkLabelSettingsCard();
   labelSettingsCard = new LabelSettingsCard();
   dataLabelSettingsCard = new DataLabelSettingsCard();
-  animationSettingsCard = new AnimationSettingsCard();
   marginSettingsCard = new MarginSettingsCard();
 
   cards: formattingSettings.SimpleCard[] = [
@@ -398,7 +369,6 @@ class VisualFormattingSettingsModel extends formattingSettings.Model {
     this.linkLabelSettingsCard,
     this.labelSettingsCard,
     this.dataLabelSettingsCard,
-    this.animationSettingsCard,
     this.marginSettingsCard,
   ];
 }
@@ -443,7 +413,7 @@ function parseSettings(dataView: DataView): VisualSettings {
     return { ...DEFAULT_SETTINGS };
   }
 
-  const { nodeSettings, linkSettings, linkLabelSettings, labelSettings, dataLabelSettings, animationSettings, marginSettings } = objects;
+  const { nodeSettings, linkSettings, linkLabelSettings, labelSettings, dataLabelSettings, marginSettings } = objects;
 
   return {
     nodeWidth: (nodeSettings?.width as number) ?? DEFAULT_SETTINGS.nodeWidth,
@@ -463,8 +433,6 @@ function parseSettings(dataView: DataView): VisualSettings {
     dataLabelFontSize: (dataLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.dataLabelFontSize,
     dataLabelColor: extractFillColor(dataLabelSettings?.color) ?? DEFAULT_SETTINGS.dataLabelColor,
     dataLabelFontFamily: (dataLabelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.dataLabelFontFamily,
-    animationEnabled: (animationSettings?.enabled as boolean) ?? DEFAULT_SETTINGS.animationEnabled,
-    animationDuration: (animationSettings?.duration as number) ?? DEFAULT_SETTINGS.animationDuration,
     marginTop: (marginSettings?.top as number) ?? DEFAULT_SETTINGS.marginTop,
     marginRight: (marginSettings?.right as number) ?? DEFAULT_SETTINGS.marginRight,
     marginBottom: (marginSettings?.bottom as number) ?? DEFAULT_SETTINGS.marginBottom,
@@ -979,8 +947,7 @@ export class Visual implements IVisual {
       this.target.style.pointerEvents = '';
       this.target.setAttribute('tabindex', '0');
       this.valueMeasureName = data.valueMeasureName;
-      const skipAnimation = (options.type & VisualUpdateType.Resize) !== 0;
-      this.renderSankey(data, viewport, skipAnimation);
+      this.renderSankey(data, viewport);
 
       // Signal rendering finished
       this.eventService.renderingFinished(options);
@@ -990,7 +957,7 @@ export class Visual implements IVisual {
     }
   }
 
-  private renderSankey(data: SankeyData, viewport: IViewport, skipAnimation: boolean = false): void {
+  private renderSankey(data: SankeyData, viewport: IViewport): void {
     const margin = {
       top: this.settings.marginTop,
       right: this.settings.marginRight,
@@ -1038,17 +1005,13 @@ export class Visual implements IVisual {
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    const animate = this.settings.animationEnabled && !skipAnimation;
-    const animDuration = this.settings.animationDuration;
-    this.renderLinks(g, graph.links, animate, animDuration);
-    this.renderNodes(g, graph.nodes, width, animate, animDuration);
+    this.renderLinks(g, graph.links);
+    this.renderNodes(g, graph.nodes, width);
   }
 
   private renderLinks(
     container: Selection<SVGGElement, unknown, null, undefined>,
-    links: ComputedLink[],
-    animate: boolean = false,
-    animDuration: number = 500
+    links: ComputedLink[]
   ): void {
     const linkPath = sankeyLinkHorizontal<ComputedNode, ComputedLink>();
     const { linkOpacity, linkColorMode } = this.settings;
@@ -1097,7 +1060,7 @@ export class Visual implements IVisual {
 
     const finalOpacity = isHighContrast ? 0.8 : linkOpacity;
 
-    const paths = container.append('g')
+    container.append('g')
       .classed('links', true)
       .selectAll('path')
       .data(links)
@@ -1107,13 +1070,7 @@ export class Visual implements IVisual {
       .attr('fill', 'none')
       .attr('stroke', (d, i) => getLinkColor(d, i))
       .attr('stroke-width', d => Math.max(1, d.width ?? 1))
-      .attr('stroke-opacity', animate ? 0 : finalOpacity);
-
-    if (animate) {
-      (paths as any).transition().duration(animDuration).attr('stroke-opacity', finalOpacity);
-    }
-
-    paths
+      .attr('stroke-opacity', finalOpacity)
       .style('cursor', 'pointer')
       .on('click', (event: MouseEvent, d: ComputedLink) => {
         // Handle click selection for links (only if interactions allowed)
@@ -1255,9 +1212,7 @@ export class Visual implements IVisual {
   private renderNodes(
     container: Selection<SVGGElement, unknown, null, undefined>,
     nodes: ComputedNode[],
-    chartWidth: number,
-    animate: boolean = false,
-    animDuration: number = 500
+    chartWidth: number
   ): void {
     const tooltipService = this.tooltipService;
     const selectionManager = this.selectionManager;
@@ -1280,7 +1235,7 @@ export class Visual implements IVisual {
       .append('g')
       .style('cursor', 'pointer');
 
-    const rects = nodeGroups.append('rect')
+    nodeGroups.append('rect')
       .attr('x', d => d.x0 ?? 0)
       .attr('y', d => d.y0 ?? 0)
       .attr('width', d => (d.x1 ?? 0) - (d.x0 ?? 0))
@@ -1288,13 +1243,7 @@ export class Visual implements IVisual {
       .attr('fill', getNodeColor)
       .attr('stroke', isHighContrast && hcColors ? hcColors.foreground : 'none')
       .attr('stroke-width', isHighContrast ? 1 : 0)
-      .style('opacity', animate ? 0 : 1);
-
-    if (animate) {
-      (rects as any).transition().duration(animDuration).style('opacity', 1);
-    }
-
-    rects.on('click', (event: MouseEvent, d: ComputedNode) => {
+      .on('click', (event: MouseEvent, d: ComputedNode) => {
         // Handle click selection for nodes (only if interactions allowed)
         if (!this.allowInteractions) return;
         if (d.selectionId) {
