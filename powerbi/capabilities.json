@@ -139,6 +139,16 @@
           "displayName": "Show",
           "displayNameKey": "Visual_ShowDataLabels",
           "type": { "bool": true }
+        },
+        "fontSize": {
+          "displayName": "Font Size",
+          "displayNameKey": "Visual_DataLabelFontSize",
+          "type": { "numeric": true }
+        },
+        "color": {
+          "displayName": "Color",
+          "displayNameKey": "Visual_DataLabelColor",
+          "type": { "fill": { "solid": { "color": true } } }
         }
       }
     },

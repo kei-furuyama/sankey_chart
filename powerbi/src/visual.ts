@@ -76,6 +76,8 @@ interface VisualSettings {
   labelColor: string;
   showLabels: boolean;
   showDataLabels: boolean;
+  dataLabelFontSize: number;
+  dataLabelColor: string;
 }
 
 const DEFAULT_SETTINGS: VisualSettings = {
@@ -91,6 +93,8 @@ const DEFAULT_SETTINGS: VisualSettings = {
   labelColor: '#333333',
   showLabels: true,
   showDataLabels: false,
+  dataLabelFontSize: 10,
+  dataLabelColor: '#666666',
 };
 
 // =============================================================================
@@ -242,10 +246,26 @@ class DataLabelSettingsCard extends formattingSettings.SimpleCard {
     value: DEFAULT_SETTINGS.showDataLabels,
   });
 
+  fontSize = new formattingSettings.NumUpDown({
+    name: 'fontSize',
+    displayName: 'Font Size',
+    value: DEFAULT_SETTINGS.dataLabelFontSize,
+    options: {
+      minValue: { value: 6, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 48, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
+  color = new formattingSettings.ColorPicker({
+    name: 'color',
+    displayName: 'Color',
+    value: { value: DEFAULT_SETTINGS.dataLabelColor },
+  });
+
   name: string = 'dataLabelSettings';
   displayName: string = 'Node Data Labels';
   topLevelSlice: formattingSettings.ToggleSwitch = this.show;
-  slices: formattingSettings.Slice[] = [];
+  slices: formattingSettings.Slice[] = [this.fontSize, this.color];
 }
 
 class VisualFormattingSettingsModel extends formattingSettings.Model {
@@ -324,6 +344,8 @@ function parseSettings(dataView: DataView): VisualSettings {
     labelColor: labelColor ?? DEFAULT_SETTINGS.labelColor,
     showLabels: (labelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLabels,
     showDataLabels: (dataLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showDataLabels,
+    dataLabelFontSize: (dataLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.dataLabelFontSize,
+    dataLabelColor: (dataLabelSettings?.color as { solid?: { color?: string } })?.solid?.color ?? DEFAULT_SETTINGS.dataLabelColor,
   };
 }
 
@@ -1150,10 +1172,10 @@ export class Visual implements IVisual {
     nodeGroups: Selection<SVGGElement, ComputedNode, SVGGElement, unknown>,
     chartWidth: number
   ): void {
-    const { labelFontSize, labelColor } = this.settings;
+    const { dataLabelFontSize, dataLabelColor } = this.settings;
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
-    const textColor = isHighContrast && hcColors ? hcColors.foreground : labelColor;
+    const textColor = isHighContrast && hcColors ? hcColors.foreground : dataLabelColor;
     const midPoint = chartWidth / 2;
     const labelOffset = 6;
     const showLabels = this.settings.showLabels;
@@ -1169,7 +1191,7 @@ export class Visual implements IVisual {
       .attr('dy', dyValue)
       .attr('text-anchor', d => (d.x0 ?? 0) < midPoint ? 'start' : 'end')
       .attr('font-family', 'Segoe UI, sans-serif')
-      .attr('font-size', labelFontSize)
+      .attr('font-size', dataLabelFontSize)
       .attr('fill', textColor)
       .text(d => (d.value ?? 0).toLocaleString());
   }
