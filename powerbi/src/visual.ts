@@ -61,7 +61,7 @@ type ComputedLink = SankeyLink<SankeyNodeDatum, SankeyLinkDatum>;
 
 // Settings
 
-type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'none';
+type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'inputOrder' | 'none';
 
 interface VisualSettings {
   nodeWidth: number;
@@ -158,6 +158,7 @@ class LinkSettingsCard extends formattingSettings.SimpleCard {
       { value: 'descending', displayName: 'Descending' },
       { value: 'byValue', displayName: 'By Value (small to large)' },
       { value: 'byValueDesc', displayName: 'By Value (large to small)' },
+      { value: 'inputOrder', displayName: 'Input Order (data sort)' },
       { value: 'none', displayName: 'None' },
     ],
     value: { value: 'ascending', displayName: 'Ascending (minimize crossing)' },
@@ -286,7 +287,7 @@ function parseSettings(dataView: DataView): VisualSettings {
   console.log('[parseSettings] sortMode raw:', linkSettings?.sortMode);
   const linkSortValue = extractDropdownValue(linkSettings?.sortMode, DEFAULT_SETTINGS.linkSort);
   console.log('[parseSettings] linkSortValue after extract:', linkSortValue);
-  const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'none'];
+  const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
   const linkSort: LinkSortMode = validLinkSortModes.includes(linkSortValue as LinkSortMode)
     ? (linkSortValue as LinkSortMode)
     : DEFAULT_SETTINGS.linkSort;
@@ -338,6 +339,10 @@ function getLinkSortFunction(
     case 'byValueDesc':
       // Sort by value descending (large flows first)
       return (a, b) => b.value - a.value;
+    case 'inputOrder':
+      // Preserve input order - return null to disable all sorting
+      // Combined with nodeSort(null), this keeps the data order from Power BI
+      return null;
     case 'none':
       // No sorting - return null to disable all link sorting including internal reordering
       return null;
@@ -726,7 +731,7 @@ export class Visual implements IVisual {
         console.log('[update] formattingSettings colorMode.value:', colorModeValue);
 
         // Override parseSettings values with formattingSettings values
-        const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'none'];
+        const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
         const extractedSortMode = extractDropdownValue(sortModeValue, this.settings.linkSort);
         if (validLinkSortModes.includes(extractedSortMode as LinkSortMode)) {
           this.settings.linkSort = extractedSortMode as LinkSortMode;
@@ -789,12 +794,15 @@ export class Visual implements IVisual {
     const linkSortFn = getLinkSortFunction(this.settings.linkSort);
     console.log('[renderSankey] linkSortFn:', linkSortFn);
     if (linkSortFn !== undefined) {
-      // Only set linkSort if we have a specific value (function or null)
-      // Leaving linkSort unset (undefined) lets d3-sankey use its internal algorithm
       console.log('[renderSankey] Calling sankeyGenerator.linkSort()');
       sankeyGenerator.linkSort(linkSortFn);
     } else {
       console.log('[renderSankey] NOT calling linkSort (using d3 default)');
+    }
+
+    // inputOrder: preserve data order for nodes by disabling d3's node reordering
+    if (this.settings.linkSort === 'inputOrder') {
+      sankeyGenerator.nodeSort(null);
     }
 
     const graph = sankeyGenerator({
