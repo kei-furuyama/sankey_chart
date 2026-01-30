@@ -1,67 +1,15 @@
 {
-  "name": "@sankey-chart/react",
+  "name": "sankey-chart-powerbi",
   "version": "1.0.0",
-  "description": "High-performance Sankey Chart component for React/Next.js",
-  "author": "Your Name",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourusername/sankey-chart"
-  },
-  "homepage": "https://github.com/kei-furuyama/sankey_chart",
-  "bugs": {
-    "url": "https://github.com/yourusername/sankey-chart/issues"
-  },
-  "keywords": [
-    "sankey",
-    "chart",
-    "visualization",
-    "d3",
-    "react",
-    "nextjs",
-    "typescript"
-  ],
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
-    },
-    "./components": {
-      "types": "./dist/components/index.d.ts",
-      "import": "./dist/components/index.mjs",
-      "require": "./dist/components/index.js"
-    },
-    "./hooks": {
-      "types": "./dist/hooks/index.d.ts",
-      "import": "./dist/hooks/index.mjs",
-      "require": "./dist/hooks/index.js"
-    },
-    "./utils": {
-      "types": "./dist/utils/index.d.ts",
-      "import": "./dist/utils/index.mjs",
-      "require": "./dist/utils/index.js"
-    }
-  },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
-  "sideEffects": false,
+  "description": "High-performance Sankey Chart Power BI Custom Visual",
+  "private": true,
   "scripts": {
     "type-check": "tsc --noEmit",
-    "lint": "eslint src --ext .ts,.tsx",
-    "lint:fix": "eslint src --ext .ts,.tsx --fix",
-    "build:lib": "tsup",
-    "build:lib:watch": "tsup --watch",
-    "prepublishOnly": "npm run build:lib",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
-    "clean": "rm -rf dist node_modules/.cache",
+    "clean": "rm -rf node_modules/.cache",
     "pbiviz:start": "cd powerbi && pbiviz start",
     "pbiviz:package": "cd powerbi && pbiviz package",
     "pbiviz:install": "npm install --prefix powerbi"
@@ -73,10 +21,6 @@
     "d3-scale": "^4.0.2",
     "d3-shape": "^3.2.0"
   },
-  "peerDependencies": {
-    "react": "^18.0.0 || ^19.0.0",
-    "react-dom": "^18.0.0 || ^19.0.0"
-  },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@types/d3": "^7.4.3",
@@ -85,28 +29,16 @@
     "@types/d3-scale": "^4.0.8",
     "@types/d3-shape": "^3.1.6",
     "@types/node": "^20.11.0",
-    "@types/react": "^18.2.48",
-    "@types/react-dom": "^18.2.18",
-    "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "^1.2.2",
     "eslint": "^8.56.0",
     "jsdom": "^27.4.0",
-    "less": "^4.2.0",
-    "less-loader": "^12.2.0",
     "powerbi-visuals-api": "^5.9.0",
     "powerbi-visuals-tools": "^5.4.0",
     "powerbi-visuals-utils-dataviewutils": "^6.1.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "tsup": "^8.0.1",
     "typescript": "^5.3.3",
     "vitest": "^1.2.2"
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
   }
 }
