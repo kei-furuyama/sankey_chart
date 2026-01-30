@@ -71,6 +71,7 @@ const VALID_NODE_COLOR_MODES: NodeColorMode[] = ['single', 'category'];
 interface VisualSettings {
   nodeWidth: number;
   nodePadding: number;
+  iterations: number;
   nodeDefaultColor: string;
   nodeColorMode: NodeColorMode;
   linkOpacity: number;
@@ -95,6 +96,7 @@ interface VisualSettings {
 const DEFAULT_SETTINGS: VisualSettings = {
   nodeWidth: 24,
   nodePadding: 16,
+  iterations: 6,
   nodeDefaultColor: '#1f77b4',
   nodeColorMode: 'category',
   linkOpacity: 0.5,
@@ -141,6 +143,16 @@ class NodeSettingsCard extends formattingSettings.SimpleCard {
     },
   });
 
+  iterations = new formattingSettings.NumUpDown({
+    name: 'iterations',
+    displayName: 'Layout Iterations',
+    value: DEFAULT_SETTINGS.iterations,
+    options: {
+      minValue: { value: 1, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 32, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
   colorMode = new formattingSettings.ItemDropdown({
     name: 'colorMode',
     displayName: 'Color Mode',
@@ -159,7 +171,7 @@ class NodeSettingsCard extends formattingSettings.SimpleCard {
 
   name: string = 'nodeSettings';
   displayName: string = 'Nodes';
-  slices: formattingSettings.Slice[] = [this.width, this.padding, this.colorMode, this.defaultColor];
+  slices: formattingSettings.Slice[] = [this.width, this.padding, this.iterations, this.colorMode, this.defaultColor];
 }
 
 class LinkSettingsCard extends formattingSettings.SimpleCard {
@@ -418,6 +430,7 @@ function parseSettings(dataView: DataView): VisualSettings {
   return {
     nodeWidth: (nodeSettings?.width as number) ?? DEFAULT_SETTINGS.nodeWidth,
     nodePadding: (nodeSettings?.padding as number) ?? DEFAULT_SETTINGS.nodePadding,
+    iterations: (nodeSettings?.iterations as number) ?? DEFAULT_SETTINGS.iterations,
     nodeDefaultColor: extractFillColor(nodeSettings?.defaultColor) ?? DEFAULT_SETTINGS.nodeDefaultColor,
     nodeColorMode: extractValidatedDropdown(nodeSettings?.colorMode, VALID_NODE_COLOR_MODES, DEFAULT_SETTINGS.nodeColorMode),
     linkOpacity: ((linkSettings?.opacity as number) ?? 50) / 100,
@@ -976,6 +989,7 @@ export class Visual implements IVisual {
       .nodeId(d => d.id)
       .nodeWidth(this.settings.nodeWidth)
       .nodePadding(this.settings.nodePadding)
+      .iterations(this.settings.iterations)
       .extent([[0, 0], [width, height]]);
 
     // Apply link sort function
