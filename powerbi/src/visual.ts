@@ -769,6 +769,12 @@ export class Visual implements IVisual {
    * Returns the formatting model for the new Format Pane
    */
   public getFormattingModel(): powerbi.visuals.FormattingModel {
+    // Hide defaultColor picker when using category colors
+    const isSingle = this.settings.nodeColorMode === 'single';
+    const card = this.formattingSettings.nodeSettingsCard;
+    card.slices = isSingle
+      ? [card.width, card.padding, card.colorMode, card.defaultColor]
+      : [card.width, card.padding, card.colorMode];
     return this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
   }
 
@@ -853,11 +859,13 @@ export class Visual implements IVisual {
         this.currentNodes = [];
         this.focusedNodeIndex = -1;
         this.showLandingPage(viewport);
+        this.svg.style('pointer-events', 'none');
         this.eventService.renderingFinished(options);
         return;
       }
 
       this.valueMeasureName = data.valueMeasureName;
+      this.svg.style('pointer-events', 'auto');
       this.renderSankey(data, viewport);
 
       // Signal rendering finished
