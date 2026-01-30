@@ -726,16 +726,16 @@ export class Visual implements IVisual {
         console.log('[update] formattingSettings colorMode.value:', colorModeValue);
 
         // Override parseSettings values with formattingSettings values
-        if (sortModeValue && typeof sortModeValue === 'object' && 'value' in sortModeValue) {
-          const sortMode = (sortModeValue as { value: string }).value as LinkSortMode;
-          if (['ascending', 'descending', 'byValue', 'byValueDesc', 'none'].includes(sortMode)) {
-            this.settings.linkSort = sortMode;
-            console.log('[update] Overriding linkSort from formattingSettings:', sortMode);
-          }
+        const validLinkSortModes: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'none'];
+        const extractedSortMode = extractDropdownValue(sortModeValue, this.settings.linkSort);
+        if (validLinkSortModes.includes(extractedSortMode as LinkSortMode)) {
+          this.settings.linkSort = extractedSortMode as LinkSortMode;
+          console.log('[update] Overriding linkSort from formattingSettings:', extractedSortMode);
         }
-        if (colorModeValue && typeof colorModeValue === 'object' && 'value' in colorModeValue) {
-          this.settings.linkColorMode = (colorModeValue as { value: string }).value;
-          console.log('[update] Overriding linkColorMode from formattingSettings:', this.settings.linkColorMode);
+        const extractedColorMode = extractDropdownValue(colorModeValue, this.settings.linkColorMode);
+        if (extractedColorMode) {
+          this.settings.linkColorMode = extractedColorMode;
+          console.log('[update] Overriding linkColorMode from formattingSettings:', extractedColorMode);
         }
       }
 
