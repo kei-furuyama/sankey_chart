@@ -169,6 +169,17 @@
         }
       }
     },
+    "nodeColors": {
+      "displayName": "Node Colors",
+      "displayNameKey": "Visual_NodeColors",
+      "properties": {
+        "fill": {
+          "displayName": "Color",
+          "displayNameKey": "Visual_NodeColor",
+          "type": { "fill": { "solid": { "color": true } } }
+        }
+      }
+    },
     "animationSettings": {
       "displayName": "Animation",
       "displayNameKey": "Visual_Animation",

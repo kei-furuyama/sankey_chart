@@ -8,8 +8,6 @@
 import powerbi from 'powerbi-visuals-api';
 import { sankey, sankeyLinkHorizontal, SankeyNode, SankeyLink } from 'd3-sankey';
 import { select, Selection, pointer } from 'd3';
-import { scaleOrdinal } from 'd3-scale';
-import { schemeCategory10 } from 'd3-scale-chromatic';
 
 import {
   formattingSettings,
@@ -492,15 +490,34 @@ function transformDataView(options: TransformDataViewOptions): SankeyData | null
     }
   }
 
-  const colorScale = scaleOrdinal<string>(schemeCategory10);
   const colorMode = options.nodeColorMode ?? 'category';
   const defaultColor = options.nodeDefaultColor ?? '#1f77b4';
+
+  // Build a map of node id -> user-specified color from per-row objects (nodeColors.fill)
+  const userColorMap = new Map<string, string>();
+  const columns = [sourceColumn, targetColumn];
+  for (const col of columns) {
+    if (!col?.objects) continue;
+    for (let i = 0; i < col.values.length; i++) {
+      const obj = col.objects[i];
+      if (!obj) continue;
+      const fill = (obj['nodeColors'] as { fill?: { solid?: { color?: string } } } | undefined)?.fill?.solid?.color;
+      if (fill) {
+        const nodeId = String(col.values[i] ?? '');
+        if (nodeId) {
+          userColorMap.set(nodeId, fill);
+        }
+      }
+    }
+  }
 
   // Create nodes with first selection ID (for cross-filtering by node)
   const nodes: SankeyNodeDatum[] = Array.from(nodeMap.entries()).map(([id, data]) => ({
     id,
     name: id,
-    color: colorMode === 'single' ? defaultColor : colorScale(id),
+    color: colorMode === 'single'
+      ? defaultColor
+      : userColorMap.get(id) ?? host.colorPalette.getColor(id).value,
     selectionId: data.selectionIds[0], // Use first selectionId for the node
   }));
 
@@ -775,7 +792,43 @@ export class Visual implements IVisual {
     card.slices = isSingle
       ? [card.width, card.padding, card.colorMode, card.defaultColor]
       : [card.width, card.padding, card.colorMode];
-    return this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
+
+    const model = this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
+
+    // In category mode, add per-node color pickers
+    if (!isSingle && this.currentNodes.length > 0) {
+      const nodeColorSlices = this.currentNodes.map(node => ({
+        uid: `nodeColors_fill_${node.id}`,
+        displayName: node.name,
+        control: {
+          type: powerbi.visuals.FormattingComponent.ColorPicker,
+          properties: {
+            descriptor: {
+              objectName: 'nodeColors',
+              propertyName: 'fill',
+              selector: node.selectionId
+                ? (node.selectionId as powerbi.visuals.ISelectionId).getSelector()
+                : null,
+            },
+            value: { value: node.color ?? this.host.colorPalette.getColor(node.id).value },
+          },
+        },
+      })) as unknown as powerbi.visuals.FormattingSlice[];
+
+      const nodeColorsCard: powerbi.visuals.FormattingCard = {
+        uid: 'nodeColorsCard',
+        displayName: 'Node Colors',
+        groups: [{
+          uid: 'nodeColorsGroup',
+          displayName: undefined as unknown as string,
+          slices: nodeColorSlices,
+        }],
+      };
+
+      model.cards.push(nodeColorsCard);
+    }
+
+    return model;
   }
 
   /**
