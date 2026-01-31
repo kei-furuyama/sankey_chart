@@ -216,13 +216,13 @@ function aggregateDuplicateLinks(
 
   linkMap.forEach((group) => {
     if (group.length === 1) {
-      aggregated.push(group[0]!);
+      aggregated.push(group.at(0)!);
       return;
     }
 
     const values = group.map((l) => l.value);
     const aggregatedValue = aggregateValues(values, method);
-    const first = group[0]!;
+    const first = group.at(0)!;
 
     aggregated.push({
       ...first,
@@ -249,9 +249,9 @@ function aggregateValues(values: number[], method: AggregationMethod): number {
     case 'min':
       return Math.min(...values);
     case 'first':
-      return values[0]!;
+      return values.at(0)!;
     case 'last':
-      return values[values.length - 1]!;
+      return values.at(-1)!;
     default:
       return values.reduce((a, b) => a + b, 0);
   }
@@ -422,7 +422,7 @@ export function fromCSV(
   let dataLines: string[];
 
   if (hasHeader) {
-    headers = parseCsvLine(lines[0]!, delimiter);
+    headers = parseCsvLine(lines.at(0)!, delimiter);
     dataLines = lines.slice(1);
   } else {
     headers = ['source', 'target', 'value'];
@@ -737,8 +737,8 @@ export function aggregateSankeyData(data: SankeyData, config: AggregationConfig)
 
   linkMap.forEach((values, key) => {
     const parts = key.split('|');
-    const source = parts[0]!;
-    const target = parts[1]!;
+    const source = parts.at(0)!;
+    const target = parts.at(1)!;
     const aggregatedValue = aggregateValues(values, config.valueAggregation);
 
     newLinks.push({
