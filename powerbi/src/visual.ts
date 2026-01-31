@@ -14,6 +14,8 @@ import {
   FormattingSettingsService,
 } from 'powerbi-visuals-utils-formattingmodel';
 
+import { valueFormatter } from 'powerbi-visuals-utils-formattingutils';
+
 import IVisual = powerbi.extensibility.visual.IVisual;
 import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructorOptions;
 import VisualUpdateOptions = powerbi.extensibility.visual.VisualUpdateOptions;
@@ -76,6 +78,7 @@ interface VisualSettings {
   nodeColorMode: NodeColorMode;
   linkOpacity: number;
   linkColorMode: string;
+  linkDefaultColor: string;
   linkSort: LinkSortMode;
   showLinkLabels: boolean;
   linkLabelFontSize: number;
@@ -87,6 +90,8 @@ interface VisualSettings {
   dataLabelFontSize: number;
   dataLabelColor: string;
   dataLabelFontFamily: string;
+  displayUnits: number;
+  decimalPlaces: number;
   marginTop: number;
   marginRight: number;
   marginBottom: number;
@@ -101,6 +106,7 @@ const DEFAULT_SETTINGS: VisualSettings = {
   nodeColorMode: 'category',
   linkOpacity: 0.5,
   linkColorMode: 'source',
+  linkDefaultColor: '#aaa',
   linkSort: 'ascending',
   showLinkLabels: false,
   linkLabelFontSize: 10,
@@ -112,6 +118,8 @@ const DEFAULT_SETTINGS: VisualSettings = {
   dataLabelFontSize: 10,
   dataLabelColor: '#666666',
   dataLabelFontFamily: "'Segoe UI', sans-serif",
+  displayUnits: 0,
+  decimalPlaces: 1,
   marginTop: 20,
   marginRight: 120,
   marginBottom: 20,
@@ -175,6 +183,12 @@ class NodeSettingsCard extends formattingSettings.SimpleCard {
 }
 
 class LinkSettingsCard extends formattingSettings.SimpleCard {
+  defaultColor = new formattingSettings.ColorPicker({
+    name: 'defaultColor',
+    displayName: 'Default Color',
+    value: { value: DEFAULT_SETTINGS.linkDefaultColor },
+  });
+
   colorMode = new formattingSettings.ItemDropdown({
     name: 'colorMode',
     displayName: 'Color Mode',
@@ -213,7 +227,7 @@ class LinkSettingsCard extends formattingSettings.SimpleCard {
 
   name: string = 'linkSettings';
   displayName: string = 'Links';
-  slices: formattingSettings.Slice[] = [this.colorMode, this.opacity, this.sortMode];
+  slices: formattingSettings.Slice[] = [this.defaultColor, this.colorMode, this.opacity, this.sortMode];
 }
 
 /**
@@ -315,10 +329,33 @@ class DataLabelSettingsCard extends formattingSettings.SimpleCard {
     value: DEFAULT_SETTINGS.dataLabelFontFamily,
   });
 
+  displayUnits = new formattingSettings.ItemDropdown({
+    name: 'displayUnits',
+    displayName: 'Display Units',
+    items: [
+      { value: '0', displayName: 'Auto' },
+      { value: '1', displayName: 'None' },
+      { value: '1000', displayName: 'Thousands' },
+      { value: '1000000', displayName: 'Millions' },
+      { value: '1000000000', displayName: 'Billions' },
+    ],
+    value: { value: '0', displayName: 'Auto' },
+  });
+
+  decimalPlaces = new formattingSettings.NumUpDown({
+    name: 'decimalPlaces',
+    displayName: 'Decimal Places',
+    value: DEFAULT_SETTINGS.decimalPlaces,
+    options: {
+      minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 10, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
   name: string = 'dataLabelSettings';
   displayName: string = 'Node Data Labels';
   topLevelSlice: formattingSettings.ToggleSwitch = this.show;
-  slices: formattingSettings.Slice[] = [this.fontFamily, this.fontSize, this.color];
+  slices: formattingSettings.Slice[] = [this.fontFamily, this.fontSize, this.color, this.displayUnits, this.decimalPlaces];
 }
 
 class MarginSettingsCard extends formattingSettings.SimpleCard {
@@ -435,6 +472,7 @@ function parseSettings(dataView: DataView): VisualSettings {
     nodeColorMode: extractValidatedDropdown(nodeSettings?.colorMode, VALID_NODE_COLOR_MODES, DEFAULT_SETTINGS.nodeColorMode),
     linkOpacity: ((linkSettings?.opacity as number) ?? 50) / 100,
     linkColorMode: extractDropdownValue(linkSettings?.colorMode, DEFAULT_SETTINGS.linkColorMode),
+    linkDefaultColor: extractFillColor(linkSettings?.defaultColor) ?? DEFAULT_SETTINGS.linkDefaultColor,
     linkSort: extractValidatedDropdown(linkSettings?.sortMode, VALID_LINK_SORT_MODES, DEFAULT_SETTINGS.linkSort),
     showLinkLabels: (linkLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLinkLabels,
     linkLabelFontSize: (linkLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.linkLabelFontSize,
@@ -446,6 +484,8 @@ function parseSettings(dataView: DataView): VisualSettings {
     dataLabelFontSize: (dataLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.dataLabelFontSize,
     dataLabelColor: extractFillColor(dataLabelSettings?.color) ?? DEFAULT_SETTINGS.dataLabelColor,
     dataLabelFontFamily: (dataLabelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.dataLabelFontFamily,
+    displayUnits: Number(extractDropdownValue(dataLabelSettings?.displayUnits, String(DEFAULT_SETTINGS.displayUnits))) || 0,
+    decimalPlaces: (dataLabelSettings?.decimalPlaces as number) ?? DEFAULT_SETTINGS.decimalPlaces,
     marginTop: (marginSettings?.top as number) ?? DEFAULT_SETTINGS.marginTop,
     marginRight: (marginSettings?.right as number) ?? DEFAULT_SETTINGS.marginRight,
     marginBottom: (marginSettings?.bottom as number) ?? DEFAULT_SETTINGS.marginBottom,
@@ -612,6 +652,8 @@ export class Visual implements IVisual {
   private focusedNodeIndex: number = -1;
   private currentNodes: ComputedNode[] = [];
   private valueMeasureName: string = 'Value';
+  private valueFormat: string = '';
+  private cachedFormatter: valueFormatter.IValueFormatter | null = null;
 
   // Interaction state
   private allowInteractions: boolean = true;
@@ -766,6 +808,18 @@ export class Visual implements IVisual {
     return localized !== key ? localized : fallback;
   }
 
+  private getValueFormatter(): valueFormatter.IValueFormatter {
+    if (!this.cachedFormatter) {
+      this.cachedFormatter = valueFormatter.create({
+        format: this.valueFormat,
+        value: this.settings.displayUnits,
+        precision: this.settings.decimalPlaces,
+        cultureSelector: this.host.locale,
+      });
+    }
+    return this.cachedFormatter;
+  }
+
   private isSelected(id: ISelectionId, selectedIds: ISelectionId[]): boolean {
     return selectedIds.some(sid => {
       const key1 = (id as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(id);
@@ -832,6 +886,13 @@ export class Visual implements IVisual {
     card.slices = isSingle
       ? [card.width, card.padding, card.iterations, card.colorMode, card.defaultColor]
       : [card.width, card.padding, card.iterations, card.colorMode];
+
+    // Show link defaultColor only in fixed mode
+    const isFixed = this.settings.linkColorMode === 'fixed';
+    const linkCard = this.formattingSettings.linkSettingsCard;
+    linkCard.slices = isFixed
+      ? [linkCard.defaultColor, linkCard.colorMode, linkCard.opacity, linkCard.sortMode]
+      : [linkCard.colorMode, linkCard.opacity, linkCard.sortMode];
 
     const model = this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
 
@@ -909,10 +970,19 @@ export class Visual implements IVisual {
         );
 
         // Override dropdown values from formattingSettings (more reliable than dataView objects)
-        const { linkSettingsCard, nodeSettingsCard } = this.formattingSettings;
+        const { linkSettingsCard, nodeSettingsCard, dataLabelSettingsCard } = this.formattingSettings;
         this.settings.linkSort = extractValidatedDropdown(linkSettingsCard.sortMode.value, VALID_LINK_SORT_MODES, this.settings.linkSort);
         this.settings.linkColorMode = extractDropdownValue(linkSettingsCard.colorMode.value, this.settings.linkColorMode);
         this.settings.nodeColorMode = extractValidatedDropdown(nodeSettingsCard.colorMode.value, VALID_NODE_COLOR_MODES, this.settings.nodeColorMode);
+        this.settings.displayUnits = Number(extractDropdownValue(dataLabelSettingsCard.displayUnits.value, '0')) || 0;
+        this.settings.decimalPlaces = dataLabelSettingsCard.decimalPlaces.value ?? this.settings.decimalPlaces;
+
+        // Extract value format string from the measure column
+        const valueCol = dataView.categorical?.values?.find(v => v.source.roles?.['value']);
+        this.valueFormat = valueCol?.source.format ?? '';
+
+        // Invalidate cached formatter since settings may have changed
+        this.cachedFormatter = null;
       }
 
       this.svg
@@ -1008,7 +1078,8 @@ export class Visual implements IVisual {
     links: ComputedLink[]
   ): void {
     const linkPath = sankeyLinkHorizontal<ComputedNode, ComputedLink>();
-    const { linkOpacity, linkColorMode } = this.settings;
+    const { linkOpacity, linkColorMode, linkDefaultColor } = this.settings;
+    const formatter = this.getValueFormatter();
     const tooltipService = this.tooltipService;
     const selectionManager = this.selectionManager;
     const isHighContrast = this.isHighContrastMode;
@@ -1045,7 +1116,7 @@ export class Visual implements IVisual {
         case 'target':
           return (d.target as ComputedNode).color ?? '#aaa';
         case 'fixed':
-          return '#aaa';
+          return linkDefaultColor;
         case 'source':
         default:
           return (d.source as ComputedNode).color ?? '#aaa';
@@ -1096,7 +1167,7 @@ export class Visual implements IVisual {
         const targetName = (d.target as ComputedNode).name;
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Flow', 'Flow'), value: `${sourceName} → ${targetName}` },
-          { displayName: this.valueMeasureName, value: (d.value ?? 0).toLocaleString() },
+          { displayName: this.valueMeasureName, value: formatter.format(d.value ?? 0) },
         ];
         tooltipService.show({
           dataItems: tooltipData,
@@ -1135,6 +1206,7 @@ export class Visual implements IVisual {
     links: ComputedLink[]
   ): void {
     const { linkLabelFontSize } = this.settings;
+    const formatter = this.getValueFormatter();
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
     const textColor = isHighContrast && hcColors ? hcColors.foreground : '#374151';
@@ -1171,7 +1243,7 @@ export class Visual implements IVisual {
     labelGroups.append('rect')
       .attr('x', d => {
         const center = getLinkCenter(d);
-        const text = String(d.value ?? 0);
+        const text = formatter.format(d.value ?? 0);
         const width = text.length * linkLabelFontSize * 0.6 + labelPadding * 2;
         return center.x - width / 2;
       })
@@ -1181,7 +1253,7 @@ export class Visual implements IVisual {
         return center.y - height / 2;
       })
       .attr('width', d => {
-        const text = String(d.value ?? 0);
+        const text = formatter.format(d.value ?? 0);
         return text.length * linkLabelFontSize * 0.6 + labelPadding * 2;
       })
       .attr('height', linkLabelFontSize * 1.4)
@@ -1200,7 +1272,7 @@ export class Visual implements IVisual {
       .attr('font-size', linkLabelFontSize)
       .attr('font-weight', '500')
       .attr('fill', textColor)
-      .text(d => (d.value ?? 0).toLocaleString());
+      .text(d => formatter.format(d.value ?? 0));
   }
 
   private renderNodes(
@@ -1267,7 +1339,7 @@ export class Visual implements IVisual {
 
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Node', 'Node'), value: d.name },
-          { displayName: this.valueMeasureName, value: totalValue.toLocaleString() },
+          { displayName: this.valueMeasureName, value: this.getValueFormatter().format(totalValue) },
         ];
 
         tooltipService.show({
@@ -1350,7 +1422,7 @@ export class Visual implements IVisual {
       .attr('font-family', dataLabelFontFamily)
       .attr('font-size', dataLabelFontSize)
       .attr('fill', textColor)
-      .text(d => (d.value ?? 0).toLocaleString());
+      .text(d => this.getValueFormatter().format(d.value ?? 0));
   }
 
   /**
