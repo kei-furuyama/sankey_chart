@@ -1,24 +1,14 @@
 /**
  * Power BI DataView Transformer
  *
- * Power BIのDataView形式をSankeyEngineが受け付けるSankeyData形式に変換します。
- * これがPower BI互換性の核となる変換レイヤーです。
- *
- * Power BI DataViewの構造:
- * - categorical: カテゴリデータ（Source, Target列）
- * - values: 数値データ（Value列）
+ * Converts Power BI DataView format to SankeyData with built-in
+ * link aggregation and color scheme support. This is a simpler
+ * alternative to dataConverter.ts for cases where Power BI host
+ * APIs are not available.
  */
 
 import type { SankeyData, SankeyNodeDatum, SankeyLinkDatum } from '../types';
 
-// =============================================================================
-// Power BI Type Definitions (powerbi-visuals-api から抜粋)
-// =============================================================================
-
-/**
- * 簡略化したDataView型定義
- * 実際のPower BI開発時は powerbi-visuals-api パッケージの型を使用
- */
 export interface DataView {
   categorical?: DataViewCategorical;
   metadata?: DataViewMetadata;
@@ -63,45 +53,33 @@ export interface DataViewMetadataColumn {
   objects?: any;
 }
 
-// =============================================================================
-// Transformer Options
-// =============================================================================
-
 type AggregationMethod = 'sum' | 'average' | 'max' | 'min';
 
 export interface TransformOptions {
-  /** ソース列の役割名 */
   sourceRole?: string;
-  /** ターゲット列の役割名 */
   targetRole?: string;
-  /** 値列の役割名 */
   valueRole?: string;
-  /** ノード色の取得方法 */
   colorScheme?: string[];
-  /** 0以下の値を除外 */
   filterNonPositive?: boolean;
-  /** 重複リンクの集約方法 */
   aggregation?: AggregationMethod;
 }
+
+const DEFAULT_COLOR_SCHEME = [
+  '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+  '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+];
 
 const DEFAULT_OPTIONS: Required<TransformOptions> = {
   sourceRole: 'Source',
   targetRole: 'Target',
   valueRole: 'Value',
-  colorScheme: [
-    '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-    '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
-  ],
+  colorScheme: DEFAULT_COLOR_SCHEME,
   filterNonPositive: true,
   aggregation: 'sum',
 };
 
-// =============================================================================
-// Main Transformer Function
-// =============================================================================
-
 /**
- * Power BI DataViewをSankeyDataに変換
+ * Convert a Power BI DataView to SankeyData with built-in aggregation.
  */
 export function transformDataView(
   dataView: DataView | undefined,
@@ -114,12 +92,9 @@ export function transformDataView(
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const { categorical } = dataView;
 
-  // カテゴリ列を取得
-  const sourceColumn = findColumnByRole(categorical.categories, opts.sourceRole);
-  const targetColumn = findColumnByRole(categorical.categories, opts.targetRole);
-
-  // 値列を取得
-  const valueColumn = findValueColumnByRole(categorical.values, opts.valueRole);
+  const sourceColumn = findCategoryByRole(categorical.categories, opts.sourceRole);
+  const targetColumn = findCategoryByRole(categorical.categories, opts.targetRole);
+  const valueColumn = findValueByRole(categorical.values, opts.valueRole);
 
   if (!sourceColumn || !targetColumn || !valueColumn) {
     console.warn('DataViewTransformer: Required columns not found', {
@@ -130,7 +105,6 @@ export function transformDataView(
     return null;
   }
 
-  // リンクを構築
   const linkMap = new Map<string, SankeyLinkDatum>();
   const nodeSet = new Set<string>();
 
@@ -149,48 +123,34 @@ export function transformDataView(
     const existing = linkMap.get(linkKey);
 
     if (existing) {
-      // 重複リンクの集約
       existing.value = aggregateValues(existing.value, value, opts.aggregation);
     } else {
       linkMap.set(linkKey, { source, target, value });
     }
   }
 
-  // ノードを構築
   const nodes: SankeyNodeDatum[] = Array.from(nodeSet).map((id, index) => ({
     id,
     name: id,
     color: opts.colorScheme[index % opts.colorScheme.length],
   }));
 
-  const links: SankeyLinkDatum[] = Array.from(linkMap.values());
-
-  return { nodes, links };
+  return { nodes, links: Array.from(linkMap.values()) };
 }
 
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-function findColumnByRole(
+function findCategoryByRole(
   categories: DataViewCategoryColumn[] | undefined,
   role: string
 ): DataViewCategoryColumn | undefined {
-  return categories?.find(col => col.source.roles?.[role]);
+  return categories?.find((col) => col.source.roles?.[role]);
 }
 
-function findValueColumnByRole(
+function findValueByRole(
   values: DataViewValueColumns | undefined,
   role: string
 ): DataViewValueColumn | undefined {
   if (!values) return undefined;
-
-  for (const col of values) {
-    if (col.source.roles?.[role]) {
-      return col;
-    }
-  }
-  return values[0]; // フォールバック: 最初の値列
+  return values.find((col) => col.source.roles?.[role]) ?? values[0];
 }
 
 function aggregateValues(
@@ -201,32 +161,16 @@ function aggregateValues(
   if (method === 'sum') return existing + newValue;
   if (method === 'max') return Math.max(existing, newValue);
   if (method === 'min') return Math.min(existing, newValue);
-  // Note: 正確な平均には件数の追跡が必要
   return (existing + newValue) / 2;
 }
 
-// =============================================================================
-// Selection Helper (Power BI Selection)
-// =============================================================================
-
 /**
- * Power BIの選択状態をノードIDリストに変換
- */
-export function getSelectedNodeIds(
-  dataView: DataView | undefined,
-  selectionManager: any // ISelectionManager
-): string[] {
-  // Power BI選択APIとの連携（実装は実際のPBI環境で）
-  return [];
-}
-
-/**
- * ハイライト値がある行を検出（フィルター適用時）
+ * Detect rows with highlight values (when filters are applied).
  */
 export function getHighlightedRows(dataView: DataView | undefined): Set<number> {
   const highlighted = new Set<number>();
-
   const valueColumn = dataView?.categorical?.values?.[0];
+
   if (valueColumn?.highlights) {
     valueColumn.highlights.forEach((h, i) => {
       if (h !== null) {
@@ -236,4 +180,14 @@ export function getHighlightedRows(dataView: DataView | undefined): Set<number> 
   }
 
   return highlighted;
+}
+
+/**
+ * Convert Power BI selection state to node ID list.
+ */
+export function getSelectedNodeIds(
+  _dataView: DataView | undefined,
+  _selectionManager: any
+): string[] {
+  return [];
 }

@@ -11,30 +11,21 @@
 import type {
   SankeyData,
   SankeyChartConfig,
-  SankeyEventHandlers,
+  LegacyEventHandlers,
   ComputedNode,
   ComputedLink,
-  DEFAULT_CONFIG,
 } from '../types';
+import { DEFAULT_CONFIG as defaultConfig } from '../types';
 import { SankeyRenderer, createSankeyRenderer } from './SankeyRenderer';
 import { Tooltip, createTooltip, TooltipConfig, TooltipFormatter } from './Tooltip';
 import { ResizeManager, createResizeManager, ResponsiveOptions } from '../utils/responsive';
-import { DEFAULT_CONFIG as defaultConfig } from '../types';
-
-// ============================================================
-// 型定義
-// ============================================================
 
 export interface SankeyChartOptions {
   config?: Partial<SankeyChartConfig>;
   responsive?: boolean | Partial<ResponsiveOptions>;
   tooltipConfig?: Partial<TooltipConfig>;
-  eventHandlers?: SankeyEventHandlers;
+  eventHandlers?: LegacyEventHandlers;
 }
-
-// ============================================================
-// SankeyChart クラス
-// ============================================================
 
 export class SankeyChart {
   private container: HTMLElement;
@@ -43,7 +34,7 @@ export class SankeyChart {
   private tooltip: Tooltip | null = null;
   private resizeManager: ResizeManager | null = null;
   private currentData: SankeyData | null = null;
-  private eventHandlers: SankeyEventHandlers = {};
+  private eventHandlers: LegacyEventHandlers = {};
 
   constructor(container: HTMLElement | string, options: SankeyChartOptions = {}) {
     // コンテナ要素を取得
@@ -111,6 +102,7 @@ export class SankeyChart {
    */
   private setupTooltipEvents(): void {
     if (!this.tooltip) return;
+    const tooltip = this.tooltip;
 
     const originalNodeHover = this.eventHandlers.onNodeHover;
     const originalLinkHover = this.eventHandlers.onLinkHover;
@@ -119,25 +111,24 @@ export class SankeyChart {
       ...this.eventHandlers,
       onNodeHover: (node, event) => {
         if (node) {
-          this.tooltip?.showForNode(node, event);
+          tooltip.showForNode(node, event);
         } else {
-          this.tooltip?.hide();
+          tooltip.hide();
         }
         originalNodeHover?.(node, event);
       },
       onLinkHover: (link, event) => {
         if (link) {
-          this.tooltip?.showForLink(link, event);
+          tooltip.showForLink(link, event);
         } else {
-          this.tooltip?.hide();
+          tooltip.hide();
         }
         originalLinkHover?.(link, event);
       },
     });
 
-    // マウス移動でツールチップ位置を更新
     this.container.addEventListener('mousemove', (event) => {
-      this.tooltip?.updatePosition(event);
+      tooltip.updatePosition(event);
     });
   }
 
@@ -162,7 +153,7 @@ export class SankeyChart {
   /**
    * イベントハンドラを設定
    */
-  setEventHandlers(handlers: SankeyEventHandlers): void {
+  setEventHandlers(handlers: LegacyEventHandlers): void {
     this.eventHandlers = { ...this.eventHandlers, ...handlers };
 
     // ツールチップ用のラッパーが必要な場合は再設定
@@ -248,10 +239,6 @@ export class SankeyChart {
     this.resizeManager?.destroy();
   }
 }
-
-// ============================================================
-// ファクトリー関数
-// ============================================================
 
 /**
  * Sankey Chart を作成

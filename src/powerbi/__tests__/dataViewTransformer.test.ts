@@ -98,7 +98,7 @@ describe('transformDataView', () => {
 
     expect(result).not.toBeNull();
     expect(result!.links).toHaveLength(1);
-    expect(result!.links[0].value).toBe(30);
+    expect(result!.links[0]!.value).toBe(30);
   });
 
   it('filters non-positive values by default', () => {
@@ -130,8 +130,8 @@ describe('transformDataView', () => {
 
     expect(result).not.toBeNull();
     expect(result!.links).toHaveLength(1);
-    expect(result!.links[0].source).toBe('A');
-    expect(result!.links[0].target).toBe('B');
+    expect(result!.links[0]!.source).toBe('A');
+    expect(result!.links[0]!.target).toBe('B');
   });
 
   it('assigns colors from colorScheme', () => {
@@ -197,7 +197,7 @@ describe('transformDataView', () => {
 
     expect(result).not.toBeNull();
     expect(result!.links).toHaveLength(1);
-    expect(result!.links[0].source).toBe('A');
-    expect(result!.links[0].target).toBe('B');
+    expect(result!.links[0]!.source).toBe('A');
+    expect(result!.links[0]!.target).toBe('B');
   });
 });

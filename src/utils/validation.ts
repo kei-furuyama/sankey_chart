@@ -13,8 +13,6 @@ import type {
   InputLink,
   InputNode,
   SankeyData,
-  SankeyNodeDatum,
-  SankeyLinkDatum,
   ValidationResult,
   ValidationIssue,
   ValidationSeverity,
@@ -465,8 +463,3 @@ export function quickValidate(data: SankeyInputData): boolean {
   return !hasSimpleCycle;
 }
 
-// ============================================================
-// エクスポート
-// ============================================================
-
-export { ValidationResultBuilder };
