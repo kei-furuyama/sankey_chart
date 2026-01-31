@@ -653,6 +653,7 @@ export class Visual implements IVisual {
   private currentNodes: ComputedNode[] = [];
   private valueMeasureName: string = 'Value';
   private valueFormat: string = '';
+  private cachedFormatter: valueFormatter.IValueFormatter | null = null;
 
   // Interaction state
   private allowInteractions: boolean = true;
@@ -807,13 +808,16 @@ export class Visual implements IVisual {
     return localized !== key ? localized : fallback;
   }
 
-  private createValueFormatter(): valueFormatter.IValueFormatter {
-    return valueFormatter.create({
-      format: this.valueFormat,
-      value: this.settings.displayUnits,
-      precision: this.settings.decimalPlaces,
-      cultureSelector: this.host.locale,
-    });
+  private getValueFormatter(): valueFormatter.IValueFormatter {
+    if (!this.cachedFormatter) {
+      this.cachedFormatter = valueFormatter.create({
+        format: this.valueFormat,
+        value: this.settings.displayUnits,
+        precision: this.settings.decimalPlaces,
+        cultureSelector: this.host.locale,
+      });
+    }
+    return this.cachedFormatter;
   }
 
   private isSelected(id: ISelectionId, selectedIds: ISelectionId[]): boolean {
@@ -971,10 +975,14 @@ export class Visual implements IVisual {
         this.settings.linkColorMode = extractDropdownValue(linkSettingsCard.colorMode.value, this.settings.linkColorMode);
         this.settings.nodeColorMode = extractValidatedDropdown(nodeSettingsCard.colorMode.value, VALID_NODE_COLOR_MODES, this.settings.nodeColorMode);
         this.settings.displayUnits = Number(extractDropdownValue(dataLabelSettingsCard.displayUnits.value, '0')) || 0;
+        this.settings.decimalPlaces = dataLabelSettingsCard.decimalPlaces.value ?? this.settings.decimalPlaces;
 
         // Extract value format string from the measure column
         const valueCol = dataView.categorical?.values?.find(v => v.source.roles?.['value']);
         this.valueFormat = valueCol?.source.format ?? '';
+
+        // Invalidate cached formatter since settings may have changed
+        this.cachedFormatter = null;
       }
 
       this.svg
@@ -1071,7 +1079,7 @@ export class Visual implements IVisual {
   ): void {
     const linkPath = sankeyLinkHorizontal<ComputedNode, ComputedLink>();
     const { linkOpacity, linkColorMode, linkDefaultColor } = this.settings;
-    const formatter = this.createValueFormatter();
+    const formatter = this.getValueFormatter();
     const tooltipService = this.tooltipService;
     const selectionManager = this.selectionManager;
     const isHighContrast = this.isHighContrastMode;
@@ -1198,6 +1206,7 @@ export class Visual implements IVisual {
     links: ComputedLink[]
   ): void {
     const { linkLabelFontSize } = this.settings;
+    const formatter = this.getValueFormatter();
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
     const textColor = isHighContrast && hcColors ? hcColors.foreground : '#374151';
@@ -1234,7 +1243,7 @@ export class Visual implements IVisual {
     labelGroups.append('rect')
       .attr('x', d => {
         const center = getLinkCenter(d);
-        const text = String(d.value ?? 0);
+        const text = formatter.format(d.value ?? 0);
         const width = text.length * linkLabelFontSize * 0.6 + labelPadding * 2;
         return center.x - width / 2;
       })
@@ -1244,7 +1253,7 @@ export class Visual implements IVisual {
         return center.y - height / 2;
       })
       .attr('width', d => {
-        const text = String(d.value ?? 0);
+        const text = formatter.format(d.value ?? 0);
         return text.length * linkLabelFontSize * 0.6 + labelPadding * 2;
       })
       .attr('height', linkLabelFontSize * 1.4)
@@ -1263,7 +1272,7 @@ export class Visual implements IVisual {
       .attr('font-size', linkLabelFontSize)
       .attr('font-weight', '500')
       .attr('fill', textColor)
-      .text(d => this.createValueFormatter().format(d.value ?? 0));
+      .text(d => formatter.format(d.value ?? 0));
   }
 
   private renderNodes(
@@ -1330,7 +1339,7 @@ export class Visual implements IVisual {
 
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Node', 'Node'), value: d.name },
-          { displayName: this.valueMeasureName, value: this.createValueFormatter().format(totalValue) },
+          { displayName: this.valueMeasureName, value: this.getValueFormatter().format(totalValue) },
         ];
 
         tooltipService.show({
@@ -1413,7 +1422,7 @@ export class Visual implements IVisual {
       .attr('font-family', dataLabelFontFamily)
       .attr('font-size', dataLabelFontSize)
       .attr('fill', textColor)
-      .text(d => this.createValueFormatter().format(d.value ?? 0));
+      .text(d => this.getValueFormatter().format(d.value ?? 0));
   }
 
   /**
