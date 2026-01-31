@@ -1,17 +1,12 @@
 /**
- * Power BI DataView -> SankeyData 変換モジュール
+ * Power BI DataView -> SankeyData conversion module
  *
- * Power BIのDataView形式から内部のSankeyData形式への変換を行う
- *
- * サポートするDataView形式:
- * - Categorical: カテゴリベースのデータ（推奨）
- * - Table: テーブル形式のデータ
+ * Converts Power BI DataView format to internal SankeyData format.
+ * Supports Categorical and Table DataView formats.
  */
 
 import type {
   SankeyData,
-  SankeyNodeDatum,
-  SankeyLinkDatum,
   PowerBIDataViewSimple,
   PowerBIColumnMapping,
   PowerBIVisualHost,
@@ -21,22 +16,19 @@ import type {
   DatasetMetadata,
 } from '../types';
 
-// ============================================================
-// DataView変換オプション
-// ============================================================
+type PowerBISankeyData = SankeyData & {
+  nodes: PowerBISankeyNode[];
+  links: PowerBISankeyLink[];
+};
+
+type AggregationMethod = 'sum' | 'average' | 'max' | 'min';
 
 export interface DataViewConverterOptions {
-  /** カラムマッピング */
   columnMapping?: PowerBIColumnMapping;
-  /** Power BIのカラーパレットを使用して自動着色 */
   inferColors?: boolean;
-  /** SelectionIdを生成（クロスフィルタリング用） */
   createSelectionIds?: boolean;
-  /** 空値の処理方法 */
   emptyValueHandling?: 'skip' | 'zero' | 'error';
-  /** ノード名のフォーマッター */
   nodeNameFormatter?: (value: string | number | null) => string;
-  /** 値のフォーマッター */
   valueFormatter?: (value: number) => number;
 }
 
@@ -53,74 +45,47 @@ const DEFAULT_OPTIONS: Required<DataViewConverterOptions> = {
   valueFormatter: (value) => value,
 };
 
-// ============================================================
-// メイン変換関数
-// ============================================================
-
 /**
- * Power BI DataViewをSankeyDataに変換
- *
- * @param dataView - Power BI DataView
- * @param host - Power BI Visual Host（色、選択ID生成用）
- * @param options - 変換オプション
- * @returns SankeyData（Power BI拡張）
- *
- * @example
- * ```ts
- * // Visual.update() 内で使用
- * const sankeyData = convertDataView(
- *   options.dataViews[0],
- *   this.host,
- *   { inferColors: true }
- * );
- * ```
+ * Convert a Power BI DataView to SankeyData.
  */
 export function convertDataView(
   dataView: PowerBIDataViewSimple | undefined,
   host?: PowerBIVisualHost,
   options?: DataViewConverterOptions
-): SankeyData & { nodes: PowerBISankeyNode[]; links: PowerBISankeyLink[] } {
+): PowerBISankeyData {
   const opts = { ...DEFAULT_OPTIONS, ...options };
 
-  // DataViewが空の場合
   if (!dataView) {
-    return createEmptyResult();
+    return { nodes: [], links: [] };
   }
 
-  // Categorical形式を優先
   if (dataView.categorical) {
     return convertCategoricalDataView(dataView, host, opts);
   }
 
-  // Table形式
   if (dataView.table) {
     return convertTableDataView(dataView, host, opts);
   }
 
-  return createEmptyResult();
+  return { nodes: [], links: [] };
 }
-
-// ============================================================
-// Categorical DataView変換
-// ============================================================
 
 function convertCategoricalDataView(
   dataView: PowerBIDataViewSimple,
   host: PowerBIVisualHost | undefined,
   options: Required<DataViewConverterOptions>
-): SankeyData & { nodes: PowerBISankeyNode[]; links: PowerBISankeyLink[] } {
+): PowerBISankeyData {
   const categorical = dataView.categorical!;
   const categories = categorical.categories || [];
   const values = categorical.values || [];
 
-  // ロールからカラムを特定
   const sourceCategory = categories.find((c) => c.source.roles['source']);
   const targetCategory = categories.find((c) => c.source.roles['target']);
   const valueColumn = values.find((v) => v.source.roles['value']);
 
   if (!sourceCategory || !targetCategory) {
     console.warn('Sankey: Source and Target categories are required');
-    return createEmptyResult();
+    return { nodes: [], links: [] };
   }
 
   const nodeMap = new Map<string, PowerBISankeyNode>();
@@ -132,12 +97,11 @@ function convertCategoricalDataView(
     const targetValue = targetCategory.values[i];
     const linkValue = valueColumn?.values[i];
 
-    // 空値の処理
     if (sourceValue == null || targetValue == null) {
       if (options.emptyValueHandling === 'error') {
         throw new Error(`Row ${i} has null source or target`);
       }
-      continue; // skip
+      continue;
     }
 
     const sourceId = options.nodeNameFormatter(sourceValue);
@@ -148,18 +112,14 @@ function convertCategoricalDataView(
       continue;
     }
 
-    // ノードの登録
     if (!nodeMap.has(sourceId)) {
-      const node = createNode(sourceId, host, options, i, 'source');
-      nodeMap.set(sourceId, node);
+      nodeMap.set(sourceId, createNode(sourceId, host, options, i, 'source'));
     }
 
     if (!nodeMap.has(targetId)) {
-      const node = createNode(targetId, host, options, i, 'target');
-      nodeMap.set(targetId, node);
+      nodeMap.set(targetId, createNode(targetId, host, options, i, 'target'));
     }
 
-    // SelectionId生成
     let selectionId: PowerBISelectionId | undefined;
     if (options.createSelectionIds && host) {
       selectionId = host
@@ -168,46 +128,37 @@ function convertCategoricalDataView(
         .createSelectionId();
     }
 
-    // リンク作成
     links.push({
       source: sourceId,
       target: targetId,
       value,
       selectionId,
-      metadata: {
-        rowIndex: i,
-      },
+      metadata: { rowIndex: i },
     });
   }
 
   return {
     nodes: Array.from(nodeMap.values()),
     links,
-    metadata: createMetadata(dataView),
+    metadata: createMetadata(),
   };
 }
-
-// ============================================================
-// Table DataView変換
-// ============================================================
 
 function convertTableDataView(
   dataView: PowerBIDataViewSimple,
   host: PowerBIVisualHost | undefined,
   options: Required<DataViewConverterOptions>
-): SankeyData & { nodes: PowerBISankeyNode[]; links: PowerBISankeyLink[] } {
+): PowerBISankeyData {
   const table = dataView.table!;
-  const columns = table.columns;
-  const rows = table.rows;
+  const { columns, rows } = table;
 
-  // カラムインデックスを特定
   const sourceIdx = findColumnIndex(columns, 'source', options.columnMapping.source);
   const targetIdx = findColumnIndex(columns, 'target', options.columnMapping.target);
   const valueIdx = findColumnIndex(columns, 'value', options.columnMapping.value);
 
   if (sourceIdx === -1 || targetIdx === -1) {
     console.warn('Sankey: Source and Target columns not found');
-    return createEmptyResult();
+    return { nodes: [], links: [] };
   }
 
   const nodeMap = new Map<string, PowerBISankeyNode>();
@@ -233,7 +184,6 @@ function convertTableDataView(
       return;
     }
 
-    // ノードの登録
     if (!nodeMap.has(sourceId)) {
       nodeMap.set(sourceId, createNode(sourceId, host, options, i, 'source'));
     }
@@ -242,36 +192,18 @@ function convertTableDataView(
       nodeMap.set(targetId, createNode(targetId, host, options, i, 'target'));
     }
 
-    // リンク作成
     links.push({
       source: sourceId,
       target: targetId,
       value,
-      metadata: {
-        rowIndex: i,
-        rowData: row,
-      },
+      metadata: { rowIndex: i, rowData: row },
     });
   });
 
   return {
     nodes: Array.from(nodeMap.values()),
     links,
-    metadata: createMetadata(dataView),
-  };
-}
-
-// ============================================================
-// ヘルパー関数
-// ============================================================
-
-function createEmptyResult(): SankeyData & {
-  nodes: PowerBISankeyNode[];
-  links: PowerBISankeyLink[];
-} {
-  return {
-    nodes: [],
-    links: [],
+    metadata: createMetadata(),
   };
 }
 
@@ -285,13 +217,9 @@ function createNode(
   const node: PowerBISankeyNode = {
     id,
     name: id,
-    metadata: {
-      role,
-      firstRowIndex: rowIndex,
-    },
+    metadata: { role, firstRowIndex: rowIndex },
   };
 
-  // 色の割り当て
   if (options.inferColors && host) {
     node.color = host.colorPalette.getColor(id).value;
   }
@@ -304,29 +232,20 @@ function findColumnIndex(
   role: string,
   fallbackName: string
 ): number {
-  // まずロールで検索
   const roleIdx = columns.findIndex((c) => c.roles[role]);
   if (roleIdx >= 0) return roleIdx;
 
-  // ロールが見つからない場合は名前で検索
-  const nameIdx = columns.findIndex(
+  return columns.findIndex(
     (c) => c.displayName.toLowerCase() === fallbackName.toLowerCase()
   );
-  return nameIdx;
 }
 
-function createMetadata(dataView: PowerBIDataViewSimple): DatasetMetadata {
+function createMetadata(): DatasetMetadata {
   return {
     source: 'Power BI DataView',
     timestamp: new Date().toISOString(),
   };
 }
-
-// ============================================================
-// リンク重複集計
-// ============================================================
-
-type AggregationMethod = 'sum' | 'average' | 'max' | 'min';
 
 function computeAggregatedValue(values: number[], method: AggregationMethod): number {
   if (method === 'sum') return values.reduce((a, b) => a + b, 0);
@@ -336,7 +255,7 @@ function computeAggregatedValue(values: number[], method: AggregationMethod): nu
 }
 
 /**
- * 同じsource-targetの組み合わせを持つリンクを集計
+ * Aggregate links that share the same source-target pair.
  */
 export function aggregateLinks(
   links: PowerBISankeyLink[],
@@ -357,17 +276,18 @@ export function aggregateLinks(
   const aggregated: PowerBISankeyLink[] = [];
 
   for (const group of linkMap.values()) {
+    const first = group[0]!;
     if (group.length === 1) {
-      aggregated.push(group[0]);
+      aggregated.push(first);
       continue;
     }
 
     const values = group.map((l) => l.value);
     aggregated.push({
-      ...group[0],
+      ...first,
       value: computeAggregatedValue(values, method),
       metadata: {
-        ...group[0].metadata,
+        ...first.metadata,
         aggregatedFrom: group.length,
         originalValues: values,
       },
@@ -377,41 +297,27 @@ export function aggregateLinks(
   return aggregated;
 }
 
-// ============================================================
-// ハイライト値の適用
-// ============================================================
-
 /**
- * Power BIのハイライト値（フィルタ適用後の値）を適用
+ * Apply Power BI highlight values (post-filter values) to links.
  */
 export function applyHighlights(
-  data: SankeyData & { nodes: PowerBISankeyNode[]; links: PowerBISankeyLink[] },
+  data: PowerBISankeyData,
   highlights: Map<string, number>
-): SankeyData & { nodes: PowerBISankeyNode[]; links: PowerBISankeyLink[] } {
+): PowerBISankeyData {
   return {
     ...data,
     links: data.links.map((link) => {
       const key = `${link.source}|${link.target}`;
       const highlightValue = highlights.get(key);
-
-      if (highlightValue !== undefined) {
-        return {
-          ...link,
-          highlightValue,
-        };
-      }
-
-      return link;
+      if (highlightValue === undefined) return link;
+      return { ...link, highlightValue };
     }),
   };
 }
 
-// ============================================================
-// カラー割り当てユーティリティ
-// ============================================================
 
 /**
- * カテゴリベースの色割り当て
+ * Assign colors based on category.
  */
 export function assignColorsByCategory(
   nodes: PowerBISankeyNode[],
@@ -434,8 +340,7 @@ export function assignColorsByCategory(
 }
 
 /**
- * レイヤーベースの色割り当て
- * ソースとターゲットで異なる色スキームを使用
+ * Assign colors based on layer role (source vs target).
  */
 export function assignColorsByLayer(
   nodes: PowerBISankeyNode[],
@@ -452,12 +357,8 @@ export function assignColorsByLayer(
   });
 }
 
-// ============================================================
-// SelectionId ユーティリティ
-// ============================================================
-
 /**
- * SelectionIdからリンクを検索
+ * Find a link by its Power BI SelectionId.
  */
 export function findLinkBySelectionId(
   links: PowerBISankeyLink[],
@@ -467,7 +368,7 @@ export function findLinkBySelectionId(
 }
 
 /**
- * SelectionIdからノードを検索
+ * Find a node by its Power BI SelectionId.
  */
 export function findNodeBySelectionId(
   nodes: PowerBISankeyNode[],
@@ -477,7 +378,7 @@ export function findNodeBySelectionId(
 }
 
 /**
- * 選択されたノードに接続されたリンクを取得
+ * Get all links connected to a given node.
  */
 export function getConnectedLinks(
   nodeId: string,
@@ -487,7 +388,7 @@ export function getConnectedLinks(
 }
 
 /**
- * 選択されたノードのSelectionIdを収集
+ * Collect SelectionIds for all links connected to a given node.
  */
 export function collectSelectionIds(
   links: PowerBISankeyLink[],
@@ -498,4 +399,3 @@ export function collectSelectionIds(
     .map((link) => link.selectionId)
     .filter((id): id is PowerBISelectionId => id !== undefined);
 }
-

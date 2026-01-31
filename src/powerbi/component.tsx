@@ -1,11 +1,11 @@
 /**
  * Power BI React Wrapper Component
  *
- * 既存のSankeyChartコンポーネントをPower BI環境でラップします。
- * Power BIからのデータ更新とイベント処理を行います。
+ * Wraps the SankeyChart component for use in Power BI environments.
+ * Handles data updates, tooltips, and selection from Power BI.
  */
 
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { SankeyChart } from '../lib/components/SankeyChart';
 import type {
@@ -13,37 +13,19 @@ import type {
   SankeyChartProps,
   ComputedNode,
   ComputedLink,
+  PowerBIVisualHost,
+  PowerBISelectionManager,
 } from '../types';
-import type {
-  IVisualHost,
-  ISelectionManager,
-  ITooltipService,
-  TooltipDataItem,
-} from './visual';
 import { VisualSettings } from './settings';
 
-// =============================================================================
-// Props Definition
-// =============================================================================
-
 export interface PowerBISankeyChartProps {
-  /** Sankey data */
   data: SankeyData | null;
-  /** Chart width */
   width: number;
-  /** Chart height */
   height: number;
-  /** Visual settings */
   settings: VisualSettings;
-  /** Power BI host */
-  host: IVisualHost;
-  /** Selection manager */
-  selectionManager: ISelectionManager;
+  host: PowerBIVisualHost;
+  selectionManager: PowerBISelectionManager;
 }
-
-// =============================================================================
-// Power BI Sankey Chart Component
-// =============================================================================
 
 export const PowerBISankeyChart: React.FC<PowerBISankeyChartProps> = ({
   data,
@@ -55,7 +37,6 @@ export const PowerBISankeyChart: React.FC<PowerBISankeyChartProps> = ({
 }) => {
   const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
 
-  // Map settings to SankeyChart props
   const chartProps = useMemo((): Partial<SankeyChartProps> => {
     const { nodeSettings, linkSettings, labelSettings } = settings;
 
@@ -87,64 +68,56 @@ export const PowerBISankeyChart: React.FC<PowerBISankeyChartProps> = ({
         },
       },
       showLabels: labelSettings.show,
-      showTooltips: false, // Power BIのツールチップを使用
+      showTooltips: false,
     };
   }, [width, height, settings]);
 
-  // Tooltip handlers
-  const handleNodeMouseEnter = useCallback(
-    (node: ComputedNode, event: React.MouseEvent) => {
-      const tooltipData: TooltipDataItem[] = [
-        {
-          displayName: node.name,
-          value: formatValue(node.value ?? 0),
-        },
-      ];
-
+  const showTooltip = useCallback(
+    (dataItems: Array<{ displayName: string; value: string }>, event: React.MouseEvent) => {
       host.tooltipService?.show({
         coordinates: [event.clientX, event.clientY],
-        dataItems: tooltipData,
+        dataItems,
         isTouchEvent: false,
+        identities: [],
       });
     },
     [host.tooltipService]
   );
 
-  const handleNodeMouseLeave = useCallback(() => {
+  const hideTooltip = useCallback(() => {
     host.tooltipService?.hide({
       isTouchEvent: false,
       immediately: true,
     });
   }, [host.tooltipService]);
+
+  const handleNodeMouseEnter = useCallback(
+    (node: ComputedNode, event: React.MouseEvent) => {
+      showTooltip(
+        [{ displayName: node.name, value: formatValue(node.value ?? 0) }],
+        event
+      );
+    },
+    [showTooltip]
+  );
 
   const handleLinkMouseEnter = useCallback(
     (link: ComputedLink, event: React.MouseEvent) => {
       const sourceName = typeof link.source === 'object' ? link.source.name : String(link.source);
       const targetName = typeof link.target === 'object' ? link.target.name : String(link.target);
 
-      const tooltipData: TooltipDataItem[] = [
-        { displayName: 'From', value: sourceName },
-        { displayName: 'To', value: targetName },
-        { displayName: 'Value', value: formatValue(link.value ?? 0) },
-      ];
-
-      host.tooltipService?.show({
-        coordinates: [event.clientX, event.clientY],
-        dataItems: tooltipData,
-        isTouchEvent: false,
-      });
+      showTooltip(
+        [
+          { displayName: 'From', value: sourceName },
+          { displayName: 'To', value: targetName },
+          { displayName: 'Value', value: formatValue(link.value ?? 0) },
+        ],
+        event
+      );
     },
-    [host.tooltipService]
+    [showTooltip]
   );
 
-  const handleLinkMouseLeave = useCallback(() => {
-    host.tooltipService?.hide({
-      isTouchEvent: false,
-      immediately: true,
-    });
-  }, [host.tooltipService]);
-
-  // Click handlers for selection
   const handleNodeClick = useCallback(
     (node: ComputedNode, event: React.MouseEvent) => {
       const multiSelect = event.ctrlKey || event.metaKey;
@@ -159,22 +132,20 @@ export const PowerBISankeyChart: React.FC<PowerBISankeyChartProps> = ({
         return newSelection;
       });
 
-      // Power BI選択API連携（実装は実際のPBI環境で）
       console.log('Node selected:', node.name);
     },
     []
   );
 
   const handleLinkClick = useCallback(
-    (link: ComputedLink, event: React.MouseEvent) => {
+    (link: ComputedLink) => {
       const sourceName = typeof link.source === 'object' ? link.source.name : String(link.source);
       const targetName = typeof link.target === 'object' ? link.target.name : String(link.target);
-      console.log('Link selected:', sourceName, '→', targetName);
+      console.log('Link selected:', sourceName, '->', targetName);
     },
     []
   );
 
-  // Empty state
   if (!data || data.nodes.length === 0) {
     return (
       <div className="sankey-no-data">
@@ -189,10 +160,10 @@ export const PowerBISankeyChart: React.FC<PowerBISankeyChartProps> = ({
       {...chartProps}
       events={{
         onNodeMouseEnter: handleNodeMouseEnter,
-        onNodeMouseLeave: handleNodeMouseLeave,
+        onNodeMouseLeave: hideTooltip,
         onNodeClick: handleNodeClick,
         onLinkMouseEnter: handleLinkMouseEnter,
-        onLinkMouseLeave: handleLinkMouseLeave,
+        onLinkMouseLeave: hideTooltip,
         onLinkClick: handleLinkClick,
       }}
       className="powerbi-sankey-chart"
@@ -200,12 +171,8 @@ export const PowerBISankeyChart: React.FC<PowerBISankeyChartProps> = ({
   );
 };
 
-// =============================================================================
-// React Mount Manager
-// =============================================================================
-
 /**
- * Power BI Visual用のReactマウント管理
+ * Manages React mounting/unmounting for Power BI visuals.
  */
 export class ReactMountManager {
   private root: Root | null = null;
@@ -215,9 +182,6 @@ export class ReactMountManager {
     this.container = container;
   }
 
-  /**
-   * Reactコンポーネントをマウント
-   */
   mount(props: PowerBISankeyChartProps): void {
     if (!this.root) {
       this.root = createRoot(this.container);
@@ -230,9 +194,6 @@ export class ReactMountManager {
     );
   }
 
-  /**
-   * Reactコンポーネントをアンマウント
-   */
   unmount(): void {
     if (this.root) {
       this.root.unmount();
@@ -241,28 +202,11 @@ export class ReactMountManager {
   }
 }
 
-// =============================================================================
-// Utility Functions
-// =============================================================================
-
-/**
- * 数値を読みやすい形式にフォーマット
- */
 function formatValue(value: number): string {
-  if (value >= 1e9) {
-    return (value / 1e9).toFixed(1) + 'B';
-  }
-  if (value >= 1e6) {
-    return (value / 1e6).toFixed(1) + 'M';
-  }
-  if (value >= 1e3) {
-    return (value / 1e3).toFixed(1) + 'K';
-  }
+  if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
+  if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
+  if (value >= 1e3) return (value / 1e3).toFixed(1) + 'K';
   return value.toLocaleString();
 }
-
-// =============================================================================
-// Export
-// =============================================================================
 
 export { PowerBISankeyChart as default };

@@ -1,13 +1,9 @@
 /**
  * Power BI Visual Settings
  *
- * Power BIの設定パネル（Format Pane）で表示される設定を定義します。
- * capabilities.jsonのobjectsと対応しています。
+ * Defines settings displayed in the Power BI Format Pane.
+ * Corresponds to objects in capabilities.json.
  */
-
-// =============================================================================
-// Settings Classes
-// =============================================================================
 
 export class NodeSettings {
   width: number = 24;
@@ -18,7 +14,7 @@ export class NodeSettings {
 
 export class LinkSettings {
   colorMode: 'source' | 'target' | 'gradient' | 'fixed' = 'source';
-  opacity: number = 50; // 0-100
+  opacity: number = 50;
   defaultColor: string = '#aaaaaa';
 }
 
@@ -35,153 +31,38 @@ export class AnimationSettings {
   duration: number = 500;
 }
 
-/**
- * 全設定をまとめたクラス
- */
 export class VisualSettings {
   nodeSettings: NodeSettings = new NodeSettings();
   linkSettings: LinkSettings = new LinkSettings();
   labelSettings: LabelSettings = new LabelSettings();
   animationSettings: AnimationSettings = new AnimationSettings();
 
-  /**
-   * Power BI 5.1+ Formatting Model用の変換
-   */
   toFormattingModel(): FormattingModel {
     return {
       cards: [
-        {
-          uid: 'nodeSettings_card',
-          displayName: 'Nodes',
-          groups: [{
-            uid: 'nodeSettings_group',
-            displayName: 'Node Settings',
-            slices: [
-              {
-                uid: 'nodeWidth',
-                displayName: 'Width',
-                control: {
-                  type: 'NumUpDown',
-                  properties: {
-                    value: this.nodeSettings.width,
-                    min: 5,
-                    max: 100,
-                  },
-                },
-              },
-              {
-                uid: 'nodePadding',
-                displayName: 'Padding',
-                control: {
-                  type: 'NumUpDown',
-                  properties: {
-                    value: this.nodeSettings.padding,
-                    min: 0,
-                    max: 50,
-                  },
-                },
-              },
-              {
-                uid: 'nodeColor',
-                displayName: 'Default Color',
-                control: {
-                  type: 'ColorPicker',
-                  properties: {
-                    value: { value: this.nodeSettings.defaultColor },
-                  },
-                },
-              },
-            ],
-          }],
-        },
-        {
-          uid: 'linkSettings_card',
-          displayName: 'Links',
-          groups: [{
-            uid: 'linkSettings_group',
-            displayName: 'Link Settings',
-            slices: [
-              {
-                uid: 'linkColorMode',
-                displayName: 'Color Mode',
-                control: {
-                  type: 'Dropdown',
-                  properties: {
-                    value: this.linkSettings.colorMode,
-                    items: [
-                      { value: 'source', displayName: 'Source' },
-                      { value: 'target', displayName: 'Target' },
-                      { value: 'gradient', displayName: 'Gradient' },
-                      { value: 'fixed', displayName: 'Fixed' },
-                    ],
-                  },
-                },
-              },
-              {
-                uid: 'linkOpacity',
-                displayName: 'Opacity (%)',
-                control: {
-                  type: 'NumUpDown',
-                  properties: {
-                    value: this.linkSettings.opacity,
-                    min: 0,
-                    max: 100,
-                  },
-                },
-              },
-            ],
-          }],
-        },
-        {
-          uid: 'labelSettings_card',
-          displayName: 'Labels',
-          groups: [{
-            uid: 'labelSettings_group',
-            displayName: 'Label Settings',
-            slices: [
-              {
-                uid: 'showLabels',
-                displayName: 'Show Labels',
-                control: {
-                  type: 'ToggleSwitch',
-                  properties: {
-                    value: this.labelSettings.show,
-                  },
-                },
-              },
-              {
-                uid: 'labelFontSize',
-                displayName: 'Font Size',
-                control: {
-                  type: 'NumUpDown',
-                  properties: {
-                    value: this.labelSettings.fontSize,
-                    min: 8,
-                    max: 24,
-                  },
-                },
-              },
-              {
-                uid: 'labelColor',
-                displayName: 'Color',
-                control: {
-                  type: 'ColorPicker',
-                  properties: {
-                    value: { value: this.labelSettings.color },
-                  },
-                },
-              },
-            ],
-          }],
-        },
+        createCard('nodeSettings', 'Nodes', [
+          createNumUpDown('nodeWidth', 'Width', this.nodeSettings.width, 5, 100),
+          createNumUpDown('nodePadding', 'Padding', this.nodeSettings.padding, 0, 50),
+          createColorPicker('nodeColor', 'Default Color', this.nodeSettings.defaultColor),
+        ]),
+        createCard('linkSettings', 'Links', [
+          createDropdown('linkColorMode', 'Color Mode', this.linkSettings.colorMode, [
+            { value: 'source', displayName: 'Source' },
+            { value: 'target', displayName: 'Target' },
+            { value: 'gradient', displayName: 'Gradient' },
+            { value: 'fixed', displayName: 'Fixed' },
+          ]),
+          createNumUpDown('linkOpacity', 'Opacity (%)', this.linkSettings.opacity, 0, 100),
+        ]),
+        createCard('labelSettings', 'Labels', [
+          createToggle('showLabels', 'Show Labels', this.labelSettings.show),
+          createNumUpDown('labelFontSize', 'Font Size', this.labelSettings.fontSize, 8, 24),
+          createColorPicker('labelColor', 'Color', this.labelSettings.color),
+        ]),
       ],
     };
   }
 }
-
-// =============================================================================
-// Formatting Model Types (Power BI 5.1+)
-// =============================================================================
 
 interface FormattingModel {
   cards: FormattingCard[];
@@ -205,16 +86,61 @@ interface FormattingSlice {
   control: any;
 }
 
-// =============================================================================
-// Parse Settings from DataView
-// =============================================================================
+function createCard(name: string, displayName: string, slices: FormattingSlice[]): FormattingCard {
+  return {
+    uid: `${name}_card`,
+    displayName,
+    groups: [{
+      uid: `${name}_group`,
+      displayName: `${displayName} Settings`,
+      slices,
+    }],
+  };
+}
+
+function createNumUpDown(uid: string, displayName: string, value: number, min: number, max: number): FormattingSlice {
+  return {
+    uid,
+    displayName,
+    control: { type: 'NumUpDown', properties: { value, min, max } },
+  };
+}
+
+function createColorPicker(uid: string, displayName: string, color: string): FormattingSlice {
+  return {
+    uid,
+    displayName,
+    control: { type: 'ColorPicker', properties: { value: { value: color } } },
+  };
+}
+
+function createToggle(uid: string, displayName: string, value: boolean): FormattingSlice {
+  return {
+    uid,
+    displayName,
+    control: { type: 'ToggleSwitch', properties: { value } },
+  };
+}
+
+function createDropdown(
+  uid: string,
+  displayName: string,
+  value: string,
+  items: Array<{ value: string; displayName: string }>
+): FormattingSlice {
+  return {
+    uid,
+    displayName,
+    control: { type: 'Dropdown', properties: { value, items } },
+  };
+}
 
 function extractColor(obj: any, key: string, fallback: string): string {
   return obj?.[key]?.solid?.color ?? fallback;
 }
 
 /**
- * DataViewから設定を解析
+ * Parse visual settings from a Power BI DataView.
  */
 export function parseSettings(dataView: any): VisualSettings {
   const settings = new VisualSettings();

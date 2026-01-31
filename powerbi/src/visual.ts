@@ -644,7 +644,7 @@ export class Visual implements IVisual {
 
     // Register for bookmark state changes
     this.selectionManager.registerOnSelectCallback(
-      (ids: ISelectionId[]) => this.onSelectionChanged(ids)
+      (ids: ISelectionId[]) => this.updateSelectionState(ids)
     );
 
     // Detect high contrast mode
@@ -761,37 +761,17 @@ export class Visual implements IVisual {
       .classed('focused', false);
   }
 
-  /**
-   * Handle selection changes (for bookmarks)
-   */
-  private onSelectionChanged(ids: ISelectionId[]): void {
-    // Update visual state based on selection
-    this.updateSelectionState(ids);
-  }
-
-  /**
-   * Get localized string with fallback
-   */
   private getLocalizedString(key: string, fallback: string): string {
     const localized = this.localizationManager.getDisplayName(key);
     return localized !== key ? localized : fallback;
   }
 
-  /**
-   * Compare two selection IDs for equality
-   */
-  private selectionIdEquals(id1: ISelectionId, id2: ISelectionId): boolean {
-    // Use getKey() for comparison if available, otherwise JSON comparison
-    const key1 = (id1 as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(id1);
-    const key2 = (id2 as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(id2);
-    return key1 === key2;
-  }
-
-  /**
-   * Check if a selection ID is in the selected list
-   */
   private isSelected(id: ISelectionId, selectedIds: ISelectionId[]): boolean {
-    return selectedIds.some(sid => this.selectionIdEquals(sid, id));
+    return selectedIds.some(sid => {
+      const key1 = (id as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(id);
+      const key2 = (sid as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(sid);
+      return key1 === key2;
+    });
   }
 
   /**

@@ -1,47 +1,28 @@
 /**
- * Sankey Chart ツールチップ
+ * Sankey Chart Tooltip
  *
- * 【設計ポイント】
- * - DOM要素として独立（SVG外に配置）
- * - マウス追従でスムーズな表示
- * - 画面端での位置補正
- * - カスタムコンテンツ対応
+ * - Rendered as a standalone DOM element (outside SVG)
+ * - Follows mouse with smooth transitions
+ * - Auto-corrects position at container edges
+ * - Supports custom content formatters
  */
 
 import type { ComputedNode, ComputedLink } from '../types';
 
-// ============================================================
-// 型定義
-// ============================================================
-
 export interface TooltipConfig {
-  /** オフセット X (px) */
   offsetX: number;
-  /** オフセット Y (px) */
   offsetY: number;
-  /** 背景色 */
   backgroundColor: string;
-  /** テキスト色 */
   textColor: string;
-  /** 枠線色 */
   borderColor: string;
-  /** フォントサイズ */
   fontSize: number;
-  /** パディング */
   padding: number;
-  /** 角丸 */
   borderRadius: number;
-  /** 最大幅 */
   maxWidth: number;
-  /** フェード時間 (ms) */
   fadeDuration: number;
 }
 
 export type TooltipFormatter<T> = (data: T) => string | HTMLElement;
-
-// ============================================================
-// デフォルト設定
-// ============================================================
 
 const DEFAULT_TOOLTIP_CONFIG: TooltipConfig = {
   offsetX: 12,
@@ -56,9 +37,13 @@ const DEFAULT_TOOLTIP_CONFIG: TooltipConfig = {
   fadeDuration: 150,
 };
 
-// ============================================================
-// Tooltip クラス
-// ============================================================
+// Reusable inline style fragments for tooltip HTML content
+const STYLE_ROW = 'display: flex; justify-content: space-between; gap: 16px;';
+const STYLE_LABEL = 'opacity: 0.8;';
+const STYLE_HEADER_NODE =
+  'font-weight: 600; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 4px;';
+const STYLE_HEADER_LINK =
+  'display: flex; align-items: center; gap: 8px; margin-bottom: 4px;';
 
 export class Tooltip {
   private element: HTMLDivElement;
@@ -75,33 +60,33 @@ export class Tooltip {
     this.linkFormatter = this.defaultLinkFormatter.bind(this);
   }
 
-  /**
-   * ツールチップ要素を作成
-   */
   private createElement(container: HTMLElement): HTMLDivElement {
+    const {
+      backgroundColor, textColor, borderColor,
+      fontSize, padding, borderRadius, maxWidth, fadeDuration,
+    } = this.config;
+
     const tooltip = document.createElement('div');
     tooltip.className = 'sankey-tooltip';
-    tooltip.style.cssText = `
-      position: absolute;
-      z-index: 1000;
-      pointer-events: none;
-      opacity: 0;
-      background-color: ${this.config.backgroundColor};
-      color: ${this.config.textColor};
-      border: 1px solid ${this.config.borderColor};
-      font-size: ${this.config.fontSize}px;
-      padding: ${this.config.padding}px;
-      border-radius: ${this.config.borderRadius}px;
-      max-width: ${this.config.maxWidth}px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-      transition: opacity ${this.config.fadeDuration}ms ease-out;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      line-height: 1.4;
-    `;
+    tooltip.style.cssText = [
+      'position: absolute',
+      'z-index: 1000',
+      'pointer-events: none',
+      'opacity: 0',
+      `background-color: ${backgroundColor}`,
+      `color: ${textColor}`,
+      `border: 1px solid ${borderColor}`,
+      `font-size: ${fontSize}px`,
+      `padding: ${padding}px`,
+      `border-radius: ${borderRadius}px`,
+      `max-width: ${maxWidth}px`,
+      'box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3)',
+      `transition: opacity ${fadeDuration}ms ease-out`,
+      "font-family: 'Segoe UI', system-ui, sans-serif",
+      'line-height: 1.4',
+    ].join('; ');
 
-    // コンテナにポジション設定がない場合は追加
-    const containerStyle = getComputedStyle(container);
-    if (containerStyle.position === 'static') {
+    if (getComputedStyle(container).position === 'static') {
       container.style.position = 'relative';
     }
 
@@ -109,47 +94,25 @@ export class Tooltip {
     return tooltip;
   }
 
-  /**
-   * ノード用フォーマッタを設定
-   */
   setNodeFormatter(formatter: TooltipFormatter<ComputedNode>): void {
     this.nodeFormatter = formatter;
   }
 
-  /**
-   * リンク用フォーマッタを設定
-   */
   setLinkFormatter(formatter: TooltipFormatter<ComputedLink>): void {
     this.linkFormatter = formatter;
   }
 
-  /**
-   * ノードのツールチップを表示
-   */
   showForNode(node: ComputedNode, event: MouseEvent): void {
-    const content = this.nodeFormatter(node);
-    this.show(content, event);
+    this.show(this.nodeFormatter(node), event);
   }
 
-  /**
-   * リンクのツールチップを表示
-   */
   showForLink(link: ComputedLink, event: MouseEvent): void {
-    const content = this.linkFormatter(link);
-    this.show(content, event);
+    this.show(this.linkFormatter(link), event);
   }
 
-  /**
-   * ツールチップを表示
-   */
   private show(content: string | HTMLElement, event: MouseEvent): void {
-    // タイムアウトをクリア
-    if (this.hideTimeout) {
-      clearTimeout(this.hideTimeout);
-      this.hideTimeout = null;
-    }
+    this.clearHideTimeout();
 
-    // コンテンツを設定
     if (typeof content === 'string') {
       this.element.innerHTML = content;
     } else {
@@ -157,17 +120,11 @@ export class Tooltip {
       this.element.appendChild(content);
     }
 
-    // 位置を計算
-    this.updatePosition(event);
-
-    // 表示
-    this.element.style.opacity = '1';
     this.isVisible = true;
+    this.updatePosition(event);
+    this.element.style.opacity = '1';
   }
 
-  /**
-   * 位置を更新
-   */
   updatePosition(event: MouseEvent): void {
     if (!this.isVisible) return;
 
@@ -176,134 +133,109 @@ export class Tooltip {
 
     const containerRect = container.getBoundingClientRect();
     const tooltipRect = this.element.getBoundingClientRect();
+    const { offsetX, offsetY } = this.config;
 
-    // マウス位置（コンテナ相対）
-    let x = event.clientX - containerRect.left + this.config.offsetX;
-    let y = event.clientY - containerRect.top + this.config.offsetY;
+    const mouseX = event.clientX - containerRect.left;
+    const mouseY = event.clientY - containerRect.top;
 
-    // 画面端での補正
-    // 右端
+    let x = mouseX + offsetX;
+    let y = mouseY + offsetY;
+
+    // Flip to opposite side if overflowing right or bottom
     if (x + tooltipRect.width > containerRect.width) {
-      x = event.clientX - containerRect.left - tooltipRect.width - this.config.offsetX;
+      x = mouseX - tooltipRect.width - offsetX;
     }
-    // 下端
     if (y + tooltipRect.height > containerRect.height) {
-      y = event.clientY - containerRect.top - tooltipRect.height - this.config.offsetY;
+      y = mouseY - tooltipRect.height - offsetY;
     }
-    // 左端
-    if (x < 0) {
-      x = this.config.offsetX;
-    }
-    // 上端
-    if (y < 0) {
-      y = this.config.offsetY;
-    }
+
+    // Clamp to container edges
+    if (x < 0) x = offsetX;
+    if (y < 0) y = offsetY;
 
     this.element.style.left = `${x}px`;
     this.element.style.top = `${y}px`;
   }
 
-  /**
-   * ツールチップを非表示
-   */
   hide(): void {
     this.hideTimeout = setTimeout(() => {
       this.element.style.opacity = '0';
       this.isVisible = false;
-    }, 50); // 少しディレイを入れてちらつきを防止
+    }, 50);
   }
 
-  /**
-   * ノードのデフォルトフォーマッタ
-   */
   private defaultNodeFormatter(node: ComputedNode): string {
-    const value = node.value ?? 0;
-    const formattedValue = this.formatNumber(value);
+    const formattedValue = this.formatNumber(node.value ?? 0);
+    const outgoing = node.sourceLinks?.length ?? 0;
+    const incoming = node.targetLinks?.length ?? 0;
 
-    return `
-      <div style="font-weight: 600; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 4px;">
-        ${this.escapeHtml(node.name)}
-      </div>
-      <div style="display: flex; justify-content: space-between; gap: 16px;">
-        <span style="opacity: 0.8;">Total Flow:</span>
+    let html = `
+      <div style="${STYLE_HEADER_NODE}">${this.escapeHtml(node.name)}</div>
+      <div style="${STYLE_ROW}">
+        <span style="${STYLE_LABEL}">Total Flow:</span>
         <span style="font-weight: 500;">${formattedValue}</span>
-      </div>
-      ${
-        node.sourceLinks && node.sourceLinks.length > 0
-          ? `<div style="display: flex; justify-content: space-between; gap: 16px;">
-              <span style="opacity: 0.8;">Outgoing:</span>
-              <span>${node.sourceLinks.length} links</span>
-            </div>`
-          : ''
-      }
-      ${
-        node.targetLinks && node.targetLinks.length > 0
-          ? `<div style="display: flex; justify-content: space-between; gap: 16px;">
-              <span style="opacity: 0.8;">Incoming:</span>
-              <span>${node.targetLinks.length} links</span>
-            </div>`
-          : ''
-      }
-    `;
+      </div>`;
+
+    if (outgoing > 0) {
+      html += `
+      <div style="${STYLE_ROW}">
+        <span style="${STYLE_LABEL}">Outgoing:</span>
+        <span>${outgoing} links</span>
+      </div>`;
+    }
+
+    if (incoming > 0) {
+      html += `
+      <div style="${STYLE_ROW}">
+        <span style="${STYLE_LABEL}">Incoming:</span>
+        <span>${incoming} links</span>
+      </div>`;
+    }
+
+    return html;
   }
 
-  /**
-   * リンクのデフォルトフォーマッタ
-   */
   private defaultLinkFormatter(link: ComputedLink): string {
     const source = link.source as ComputedNode;
     const target = link.target as ComputedNode;
     const formattedValue = this.formatNumber(link.value);
 
     return `
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+      <div style="${STYLE_HEADER_LINK}">
         <span style="font-weight: 600;">${this.escapeHtml(source.name)}</span>
         <span style="opacity: 0.6;">\u2192</span>
         <span style="font-weight: 600;">${this.escapeHtml(target.name)}</span>
       </div>
-      <div style="display: flex; justify-content: space-between; gap: 16px;">
-        <span style="opacity: 0.8;">Value:</span>
+      <div style="${STYLE_ROW}">
+        <span style="${STYLE_LABEL}">Value:</span>
         <span style="font-weight: 500;">${formattedValue}</span>
-      </div>
-    `;
+      </div>`;
   }
 
-  /**
-   * 数値フォーマット
-   */
   private formatNumber(value: number): string {
-    if (value >= 1000000) {
-      return (value / 1000000).toFixed(1) + 'M';
-    }
-    if (value >= 1000) {
-      return (value / 1000).toFixed(1) + 'K';
-    }
+    if (value >= 1_000_000) return (value / 1_000_000).toFixed(1) + 'M';
+    if (value >= 1_000) return (value / 1_000).toFixed(1) + 'K';
     return value.toLocaleString();
   }
 
-  /**
-   * HTMLエスケープ
-   */
   private escapeHtml(text: string): string {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
   }
 
-  /**
-   * リソースを破棄
-   */
-  destroy(): void {
+  private clearHideTimeout(): void {
     if (this.hideTimeout) {
       clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
     }
+  }
+
+  destroy(): void {
+    this.clearHideTimeout();
     this.element.remove();
   }
 }
-
-// ============================================================
-// ファクトリー関数
-// ============================================================
 
 export function createTooltip(
   container: HTMLElement,

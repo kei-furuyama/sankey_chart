@@ -24,13 +24,17 @@ import type {
   ComputedGraph,
   ComputedNode,
   ComputedLink,
-  NodeAlignment,
 } from '../types';
 import { getLinkSortFunction } from '../utils/link-sort';
 
-// ============================================================
-// アライメント関数マッピング
-// ============================================================
+function fnv1aHash(str: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
 
 const ALIGNMENT_MAP = {
   left: sankeyLeft,
@@ -38,10 +42,6 @@ const ALIGNMENT_MAP = {
   center: sankeyCenter,
   justify: sankeyJustify,
 } as const;
-
-// ============================================================
-// SankeyLayout クラス
-// ============================================================
 
 export class SankeyLayout {
   private config: SankeyChartConfig;
@@ -146,6 +146,32 @@ export class SankeyLayout {
   }
 
   /**
+   * 増分更新（ノード位置のみ変更された場合用）
+   */
+  updateNodePositions(
+    graph: ComputedGraph,
+    updates: Map<string, { x?: number; y?: number }>
+  ): ComputedGraph {
+    const updatedNodes = graph.nodes.map((node) => {
+      const update = updates.get(node.id);
+      if (!update) return node;
+      const newNode = { ...node };
+      if (update.x !== undefined) {
+        const w = (node.x1 ?? 0) - (node.x0 ?? 0);
+        newNode.x0 = update.x;
+        newNode.x1 = update.x + w;
+      }
+      if (update.y !== undefined) {
+        const h = (node.y1 ?? 0) - (node.y0 ?? 0);
+        newNode.y0 = update.y;
+        newNode.y1 = update.y + h;
+      }
+      return newNode;
+    });
+    return { nodes: updatedNodes, links: graph.links };
+  }
+
+  /**
    * 特定ノードに関連するリンクを取得（ハイライト用）
    */
   getConnectedLinks(node: ComputedNode): ComputedLink[] {
@@ -226,26 +252,15 @@ export class SankeyLayout {
     return { nodes, links };
   }
 
-  /**
-   * データハッシュ計算（キャッシュ用）
-   */
   private computeDataHash(data: SankeyData): string {
-    // 簡易的なハッシュ（本番では高速なハッシュ関数を使用推奨）
-    return JSON.stringify({
-      nodes: data.nodes.map((n) => n.id),
-      links: data.links.map((l) => `${l.source}-${l.target}-${l.value}`),
-      config: {
-        width: this.config.width,
-        height: this.config.height,
-        layout: this.config.layout,
-      },
-    });
+    const { width, height, layout } = this.config;
+    const parts: string[] = [];
+    for (const n of data.nodes) parts.push(n.id);
+    for (const l of data.links) parts.push(`${l.source}-${l.target}-${l.value}`);
+    parts.push(`${width}_${height}_${layout.nodeWidth}_${layout.nodePadding}_${layout.nodeAlignment}_${layout.iterations}_${layout.linkSort ?? 'ascending'}`);
+    return fnv1aHash(parts.join('|'));
   }
 }
-
-// ============================================================
-// ファクトリー関数
-// ============================================================
 
 export function createSankeyLayout(config: SankeyChartConfig): SankeyLayout {
   return new SankeyLayout(config);

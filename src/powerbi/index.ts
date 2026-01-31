@@ -1,18 +1,26 @@
 /**
  * Power BI Module Exports
  *
- * Power BI互換のデータ変換ユーティリティをエクスポート。
- *
- * 注意: 実際のPower BIカスタムビジュアルは powerbi/src/visual.ts を使用します。
- * このモジュールはデータ変換やWeb統合用のヘルパーです。
+ * Data conversion utilities and React integration for Power BI visuals.
+ * The actual Power BI custom visual entry point is powerbi/src/visual.ts.
  */
 
-// DataView Transformer
+// DataView Transformer (standalone, no Power BI host required)
 export { transformDataView, getSelectedNodeIds, getHighlightedRows } from './dataViewTransformer';
 export type { DataView, DataViewCategorical, TransformOptions } from './dataViewTransformer';
 
-// DataView Converter (alternative API)
-export { convertDataView, aggregateLinks, applyHighlights } from './dataConverter';
+// DataView Converter (uses Power BI host APIs for colors and selection)
+export {
+  convertDataView,
+  aggregateLinks,
+  applyHighlights,
+  assignColorsByCategory,
+  assignColorsByLayer,
+  findLinkBySelectionId,
+  findNodeBySelectionId,
+  getConnectedLinks,
+  collectSelectionIds,
+} from './dataConverter';
 export type { DataViewConverterOptions } from './dataConverter';
 
 // Settings
@@ -25,6 +33,6 @@ export {
   parseSettings,
 } from './settings';
 
-// React Component for Power BI-style integration
+// React Component
 export { PowerBISankeyChart, ReactMountManager } from './component';
 export type { PowerBISankeyChartProps } from './component';
