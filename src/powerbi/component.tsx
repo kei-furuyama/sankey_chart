@@ -132,16 +132,12 @@ export const PowerBISankeyChart: React.FC<PowerBISankeyChartProps> = ({
         return newSelection;
       });
 
-      console.log('Node selected:', node.name);
     },
     []
   );
 
   const handleLinkClick = useCallback(
-    (link: ComputedLink) => {
-      const sourceName = typeof link.source === 'object' ? link.source.name : String(link.source);
-      const targetName = typeof link.target === 'object' ? link.target.name : String(link.target);
-      console.log('Link selected:', sourceName, '->', targetName);
+    (_link: ComputedLink) => {
     },
     []
   );
