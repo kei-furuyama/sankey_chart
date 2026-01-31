@@ -80,7 +80,14 @@
         "defaultColor": {
           "displayName": "Default Color",
           "displayNameKey": "Visual_DefaultColor",
-          "type": { "fill": { "solid": { "color": true } } }
+          "type": { "fill": { "solid": { "color": true } } },
+          "rule": {
+            "inputRole": "value",
+            "output": {
+              "property": "fill",
+              "selector": ["source"]
+            }
+          }
         }
       }
     },
@@ -88,6 +95,11 @@
       "displayName": "Links",
       "displayNameKey": "Visual_Links",
       "properties": {
+        "defaultColor": {
+          "displayName": "Default Color",
+          "displayNameKey": "Visual_LinkDefaultColor",
+          "type": { "fill": { "solid": { "color": true } } }
+        },
         "colorMode": {
           "displayName": "Color Mode",
           "displayNameKey": "Visual_ColorMode",
@@ -186,6 +198,24 @@
           "displayName": "Font",
           "displayNameKey": "Visual_DataLabelFontFamily",
           "type": { "formatting": { "fontFamily": true } }
+        },
+        "displayUnits": {
+          "displayName": "Display Units",
+          "displayNameKey": "Visual_DisplayUnits",
+          "type": {
+            "enumeration": [
+              { "value": "0", "displayName": "Auto" },
+              { "value": "1", "displayName": "None" },
+              { "value": "1000", "displayName": "Thousands" },
+              { "value": "1000000", "displayName": "Millions" },
+              { "value": "1000000000", "displayName": "Billions" }
+            ]
+          }
+        },
+        "decimalPlaces": {
+          "displayName": "Decimal Places",
+          "displayNameKey": "Visual_DecimalPlaces",
+          "type": { "numeric": true }
         }
       }
     },
