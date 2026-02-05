@@ -6,7 +6,7 @@
  */
 
 // DataView Transformer (standalone, no Power BI host required)
-export { transformDataView, getSelectedNodeIds, getHighlightedRows } from './dataViewTransformer';
+export { transformDataView, getHighlightedRows } from './dataViewTransformer';
 export type { DataView, DataViewCategorical, TransformOptions } from './dataViewTransformer';
 
 // DataView Converter (uses Power BI host APIs for colors and selection)
@@ -33,6 +33,3 @@ export {
   parseSettings,
 } from './settings';
 
-// React Component
-export { PowerBISankeyChart, ReactMountManager } from './component';
-export type { PowerBISankeyChartProps } from './component';

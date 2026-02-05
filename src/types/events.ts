@@ -4,6 +4,15 @@
 
 import type { ComputedNode, ComputedLink } from './internal.js';
 
+/**
+ * Minimal React type stubs for type definitions.
+ * Avoids a hard dependency on @types/react.
+ */
+declare namespace React {
+  type ReactNode = unknown;
+  type CSSProperties = Record<string, string | number | undefined>;
+}
+
 // ============================================================
 // イベント型定義（詳細版）
 // ============================================================

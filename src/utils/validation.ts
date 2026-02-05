@@ -455,11 +455,38 @@ export function quickValidate(data: SankeyInputData): boolean {
     nodeIds.add(link.target);
   }
 
-  // 簡易循環チェック（完全ではない）
-  const hasSimpleCycle = data.links.some((link) =>
-    data.links.some((other) => other.source === link.target && other.target === link.source)
-  );
+  // DFSベースの循環チェック（O(V+E)）
+  const adjacency = new Map<string, string[]>();
+  for (const id of nodeIds) {
+    adjacency.set(id, []);
+  }
+  for (const link of data.links) {
+    adjacency.get(link.source)?.push(link.target);
+  }
 
-  return !hasSimpleCycle;
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const color = new Map<string, number>();
+  for (const id of nodeIds) {
+    color.set(id, WHITE);
+  }
+
+  function hasCycleDfs(node: string): boolean {
+    color.set(node, GRAY);
+    for (const neighbor of adjacency.get(node) ?? []) {
+      const c = color.get(neighbor);
+      if (c === GRAY) return true;
+      if (c === WHITE && hasCycleDfs(neighbor)) return true;
+    }
+    color.set(node, BLACK);
+    return false;
+  }
+
+  for (const id of nodeIds) {
+    if (color.get(id) === WHITE && hasCycleDfs(id)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 

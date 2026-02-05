@@ -8,7 +8,7 @@
  */
 
 import type { SankeyData, SankeyNodeDatum, SankeyLinkDatum } from '../types';
-import { aggregateNumbers } from '../utils/aggregation';
+import { aggregateNumbers, type AggregationMethod } from '../utils/aggregation';
 
 export interface DataView {
   categorical?: DataViewCategorical;
@@ -53,8 +53,6 @@ export interface DataViewMetadataColumn {
   format?: string;
   objects?: any;
 }
-
-type AggregationMethod = 'sum' | 'average' | 'max' | 'min';
 
 export interface TransformOptions {
   sourceRole?: string;
@@ -120,7 +118,7 @@ export function transformDataView(
     nodeSet.add(source);
     nodeSet.add(target);
 
-    const linkKey = `${source}||${target}`;
+    const linkKey = `${source}\0${target}`;
     const existing = linkBuckets.get(linkKey);
 
     if (existing) {
@@ -178,12 +176,3 @@ export function getHighlightedRows(dataView: DataView | undefined): Set<number> 
   return highlighted;
 }
 
-/**
- * Convert Power BI selection state to node ID list.
- */
-export function getSelectedNodeIds(
-  _dataView: DataView | undefined,
-  _selectionManager: any
-): string[] {
-  return [];
-}

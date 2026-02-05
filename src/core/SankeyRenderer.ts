@@ -7,6 +7,7 @@ import type {
   LegacyEventHandlers,
   SankeyData,
 } from '../types';
+import { resolveNodeFromLink } from '../types';
 import { SankeyLayout } from './SankeyLayout';
 import {
   LABEL_OFFSET_X,
@@ -74,7 +75,7 @@ export class SankeyRenderer {
   }
 
   private getLinkKey(link: ComputedLink): string {
-    return `${(link.source as ComputedNode).id}-${(link.target as ComputedNode).id}`;
+    return `${resolveNodeFromLink(link.source).id}-${resolveNodeFromLink(link.target).id}`;
   }
 
   private getGradientId(link: ComputedLink): string {
@@ -98,7 +99,7 @@ export class SankeyRenderer {
     return animation.enabled ? animation.duration : 0;
   }
 
-  private createTransition(): d3.Transition<d3.BaseType, unknown, null, undefined> {
+  private createTransition(): d3.Transition<d3.BaseType, any, any, any> {
     return d3
       .transition()
       .duration(this.getAnimationDuration())
@@ -188,7 +189,7 @@ export class SankeyRenderer {
     }
 
     allLinks
-      .transition(this.createTransition() as any)
+      .transition(this.createTransition())
       .attr('d', pathGenerator)
       .attr('stroke-width', (d) => this.getLinkStrokeWidth(d))
       .attr('stroke-dashoffset', 0)
@@ -238,7 +239,7 @@ export class SankeyRenderer {
     }
 
     allNodes
-      .transition(this.createTransition() as any)
+      .transition(this.createTransition())
       .attr('x', (d) => d.x0 ?? 0)
       .attr('y', (d) => d.y0 ?? 0)
       .attr('width', (d) => this.getNodeWidth(d))
@@ -285,7 +286,7 @@ export class SankeyRenderer {
       .attr('text-anchor', (d) => (this.isLabelOnRight(d) ? 'start' : 'end'))
       .attr('y', (d) => ((d.y0 ?? 0) + (d.y1 ?? 0)) / 2);
 
-    allLabels.transition(this.createTransition() as any).style('opacity', 1);
+    allLabels.transition(this.createTransition()).style('opacity', 1);
   }
 
   private updateLinkGradients(links: ComputedLink[]): void {
@@ -308,8 +309,8 @@ export class SankeyRenderer {
     const allGradients = enterGradients.merge(gradients);
 
     allGradients
-      .attr('x1', (d) => (d.source as ComputedNode).x1 ?? 0)
-      .attr('x2', (d) => (d.target as ComputedNode).x0 ?? 0);
+      .attr('x1', (d) => resolveNodeFromLink(d.source).x1 ?? 0)
+      .attr('x2', (d) => resolveNodeFromLink(d.target).x0 ?? 0);
 
     allGradients
       .selectAll('stop.source')
@@ -317,7 +318,7 @@ export class SankeyRenderer {
       .join('stop')
       .attr('class', 'source')
       .attr('offset', '0%')
-      .attr('stop-color', (d) => (d.source as ComputedNode).color ?? this.config.style.nodeColor);
+      .attr('stop-color', (d) => resolveNodeFromLink(d.source).color ?? this.config.style.nodeColor);
 
     allGradients
       .selectAll('stop.target')
@@ -325,7 +326,7 @@ export class SankeyRenderer {
       .join('stop')
       .attr('class', 'target')
       .attr('offset', '100%')
-      .attr('stop-color', (d) => (d.target as ComputedNode).color ?? this.config.style.nodeColor);
+      .attr('stop-color', (d) => resolveNodeFromLink(d.target).color ?? this.config.style.nodeColor);
   }
 
   private getLinkColor(link: ComputedLink): string {
@@ -335,9 +336,9 @@ export class SankeyRenderer {
 
     switch (style.linkColorMode) {
       case 'source':
-        return (link.source as ComputedNode).color ?? style.nodeColor;
+        return resolveNodeFromLink(link.source).color ?? style.nodeColor;
       case 'target':
-        return (link.target as ComputedNode).color ?? style.nodeColor;
+        return resolveNodeFromLink(link.target).color ?? style.nodeColor;
       case 'gradient':
         return `url(#${this.getGradientId(link)})`;
       case 'fixed':
@@ -407,8 +408,8 @@ export class SankeyRenderer {
 
     if (this.hoveredLink) {
       links.add(this.hoveredLink);
-      nodes.add(this.hoveredLink.source as ComputedNode);
-      nodes.add(this.hoveredLink.target as ComputedNode);
+      nodes.add(resolveNodeFromLink(this.hoveredLink.source));
+      nodes.add(resolveNodeFromLink(this.hoveredLink.target));
     }
 
     return { nodes, links };

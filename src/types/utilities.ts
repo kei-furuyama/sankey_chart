@@ -154,3 +154,29 @@ export function isComputedNode(value: unknown): value is ComputedNode {
     typeof obj.y1 === 'number'
   );
 }
+
+/**
+ * d3-sankey処理後、link.source/targetをComputedNodeに安全に変換する。
+ * 解決済みでない場合はエラーをスローする。
+ */
+export function resolveNodeFromLink(
+  endpoint: number | string | ComputedNode
+): ComputedNode {
+  if (typeof endpoint === 'object' && endpoint !== null && 'id' in endpoint) {
+    return endpoint;
+  }
+  throw new Error(`Expected resolved ComputedNode but got ${typeof endpoint}`);
+}
+
+/**
+ * d3-sankey処理後、link.source/targetをComputedNodeに安全に変換する。
+ * 解決済みでない場合はundefinedを返す。
+ */
+export function tryResolveNodeFromLink(
+  endpoint: number | string | ComputedNode
+): ComputedNode | undefined {
+  if (typeof endpoint === 'object' && endpoint !== null && 'id' in endpoint) {
+    return endpoint;
+  }
+  return undefined;
+}

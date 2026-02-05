@@ -17,9 +17,9 @@ export function aggregateNumbers(values: number[], method: AggregationMethod): n
     case 'min':
       return Math.min(...values);
     case 'first':
-      return values.at(0)!;
+      return values.at(0) ?? 0;
     case 'last':
-      return values.at(-1)!;
+      return values.at(-1) ?? 0;
     default:
       return values.reduce((a, b) => a + b, 0);
   }

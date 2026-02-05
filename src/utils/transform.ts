@@ -50,12 +50,11 @@ export function transformToSankeyData(
   options: Partial<TransformOptions> = {}
 ): SankeyData {
   const overrides: Partial<TransformOptions> = {};
-  (Object.entries(options) as Array<[keyof TransformOptions, TransformOptions[keyof TransformOptions]]>)
-    .forEach(([key, value]) => {
-      if (value !== undefined) {
-        overrides[key] = value;
-      }
-    });
+  for (const [key, value] of Object.entries(options)) {
+    if (value !== undefined) {
+      (overrides as Record<string, unknown>)[key] = value;
+    }
+  }
 
   const opts: TransformOptions = {
     ...DEFAULT_TRANSFORM_OPTIONS,
@@ -206,7 +205,7 @@ function aggregateDuplicateLinks(
 
   // キーでグループ化
   links.forEach((link) => {
-    const key = `${link.source}|${link.target}`;
+    const key = `${link.source}\0${link.target}`;
     const group = linkMap.get(key) || [];
     group.push(link);
     linkMap.set(key, group);
@@ -216,14 +215,14 @@ function aggregateDuplicateLinks(
   const aggregated: SankeyLinkDatum[] = [];
 
   linkMap.forEach((group) => {
+    const first = group[0] as SankeyLinkDatum;
     if (group.length === 1) {
-      aggregated.push(group.at(0)!);
+      aggregated.push(first);
       return;
     }
 
     const values = group.map((l) => l.value);
     const aggregatedValue = aggregateNumbers(values, method);
-    const first = group.at(0)!;
 
     aggregated.push({
       ...first,
@@ -408,7 +407,7 @@ export function fromCSV(
   let dataLines: string[];
 
   if (hasHeader) {
-    headers = parseCsvLine(lines.at(0)!, delimiter);
+    headers = parseCsvLine(lines[0] as string, delimiter);
     dataLines = lines.slice(1);
   } else {
     headers = ['source', 'target', 'value'];
@@ -713,7 +712,7 @@ export function aggregateSankeyData(data: SankeyData, config: AggregationConfig)
       return;
     }
 
-    const key = `${newSource}|${newTarget}`;
+    const key = `${newSource}\0${newTarget}`;
     const values = linkMap.get(key) || [];
     values.push(link.value);
     linkMap.set(key, values);
@@ -722,9 +721,9 @@ export function aggregateSankeyData(data: SankeyData, config: AggregationConfig)
   const newLinks: SankeyLinkDatum[] = [];
 
   linkMap.forEach((values, key) => {
-    const parts = key.split('|');
-    const source = parts.at(0)!;
-    const target = parts.at(1)!;
+    const parts = key.split('\0');
+    const source = parts[0] as string;
+    const target = parts[1] as string;
     const aggregatedValue = aggregateNumbers(values, config.valueAggregation);
 
     newLinks.push({

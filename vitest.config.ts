@@ -12,11 +12,12 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      include: ['src/lib/**/*.{ts,tsx}'],
+      include: ['src/core/**/*.ts', 'src/utils/**/*.ts', 'src/powerbi/**/*.ts'],
       exclude: [
-        'src/lib/**/*.d.ts',
-        'src/lib/**/index.ts',
-        'src/lib/types/**',
+        'src/**/*.d.ts',
+        'src/**/index.ts',
+        'src/types/**',
+        'src/**/__tests__/**',
       ],
     },
   },

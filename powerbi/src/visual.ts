@@ -535,6 +535,13 @@ function getLinkSortFunction(
   }
 }
 
+function resolveNode(endpoint: string | number | ComputedNode): ComputedNode {
+  if (typeof endpoint === 'object' && endpoint !== null && 'id' in endpoint) {
+    return endpoint;
+  }
+  throw new Error(`Expected resolved ComputedNode but got ${typeof endpoint}`);
+}
+
 // Data Transformer
 
 function transformDataView(options: TransformDataViewOptions): SankeyData | null {
@@ -585,7 +592,7 @@ function transformDataView(options: TransformDataViewOptions): SankeyData | null
     nodeMap.get(target)!.selectionIds.push(selectionId);
 
     // Track link with selection IDs
-    const key = `${source}||${target}`;
+    const key = `${source}\0${target}`;
     const existing = linkMap.get(key);
     if (existing) {
       existing.value += value;
@@ -671,7 +678,9 @@ export class Visual implements IVisual {
     this.localizationManager = this.host.createLocalizationManager();
     this.formattingSettingsService = new FormattingSettingsService(this.localizationManager);
     this.formattingSettings = new VisualFormattingSettingsModel();
-    this.allowInteractions = (this.host as unknown as { allowInteractions?: boolean }).allowInteractions ?? true;
+    this.allowInteractions = 'allowInteractions' in this.host
+      ? (this.host as unknown as { allowInteractions: boolean }).allowInteractions
+      : true;
 
     // Create main container with focus support
     this.target.setAttribute('tabindex', '0');
@@ -914,6 +923,7 @@ export class Visual implements IVisual {
             value: { value: node.color ?? this.host.colorPalette.getColor(node.id).value },
           },
         },
+      // Cast required: Power BI FormattingSlice type doesn't expose the control shape we build dynamically
       })) as unknown as powerbi.visuals.FormattingSlice[];
 
       const nodeColorsCard: powerbi.visuals.FormattingCard = {
@@ -921,7 +931,7 @@ export class Visual implements IVisual {
         displayName: 'Node Colors',
         groups: [{
           uid: 'nodeColorsGroup',
-          displayName: undefined as unknown as string,
+          displayName: '',
           slices: nodeColorSlices,
         }],
       };
@@ -1093,16 +1103,16 @@ export class Visual implements IVisual {
         const gradient = defs.append('linearGradient')
           .attr('id', `gradient-${i}`)
           .attr('gradientUnits', 'userSpaceOnUse')
-          .attr('x1', (link.source as ComputedNode).x1 ?? 0)
+          .attr('x1', resolveNode(link.source).x1 ?? 0)
           .attr('y1', 0)
-          .attr('x2', (link.target as ComputedNode).x0 ?? 0)
+          .attr('x2', resolveNode(link.target).x0 ?? 0)
           .attr('y2', 0);
         gradient.append('stop')
           .attr('offset', '0%')
-          .attr('stop-color', (link.source as ComputedNode).color ?? '#aaa');
+          .attr('stop-color', resolveNode(link.source).color ?? '#aaa');
         gradient.append('stop')
           .attr('offset', '100%')
-          .attr('stop-color', (link.target as ComputedNode).color ?? '#aaa');
+          .attr('stop-color', resolveNode(link.target).color ?? '#aaa');
       });
     }
 
@@ -1114,12 +1124,12 @@ export class Visual implements IVisual {
         case 'gradient':
           return `url(#gradient-${i})`;
         case 'target':
-          return (d.target as ComputedNode).color ?? '#aaa';
+          return resolveNode(d.target).color ?? '#aaa';
         case 'fixed':
           return linkDefaultColor;
         case 'source':
         default:
-          return (d.source as ComputedNode).color ?? '#aaa';
+          return resolveNode(d.source).color ?? '#aaa';
       }
     };
 
@@ -1163,8 +1173,8 @@ export class Visual implements IVisual {
       })
       .on('mouseover', (event: MouseEvent, d: ComputedLink) => {
         select(event.currentTarget as SVGPathElement).attr('stroke-opacity', 0.8);
-        const sourceName = (d.source as ComputedNode).name;
-        const targetName = (d.target as ComputedNode).name;
+        const sourceName = resolveNode(d.source).name;
+        const targetName = resolveNode(d.target).name;
         const tooltipData: VisualTooltipDataItem[] = [
           { displayName: this.getLocalizedString('Visual_Tooltip_Flow', 'Flow'), value: `${sourceName} → ${targetName}` },
           { displayName: this.valueMeasureName, value: formatter.format(d.value ?? 0) },
@@ -1227,8 +1237,8 @@ export class Visual implements IVisual {
 
     // Calculate center position for each link
     const getLinkCenter = (d: ComputedLink): { x: number; y: number } => {
-      const source = d.source as ComputedNode;
-      const target = d.target as ComputedNode;
+      const source = resolveNode(d.source);
+      const target = resolveNode(d.target);
       const sourceX = source.x1 ?? 0;
       const targetX = target.x0 ?? 0;
       const sourceY = d.y0 ?? 0;

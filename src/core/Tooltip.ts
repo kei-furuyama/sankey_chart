@@ -8,6 +8,7 @@
  */
 
 import type { ComputedNode, ComputedLink } from '../types';
+import { resolveNodeFromLink } from '../types';
 import {
   NUMBER_FORMAT_MILLION,
   NUMBER_FORMAT_THOUSAND,
@@ -75,6 +76,7 @@ export class Tooltip {
   private linkFormatter: TooltipFormatter<ComputedLink>;
   private isVisible: boolean = false;
   private hideTimeout: ReturnType<typeof setTimeout> | null = null;
+  private cachedContainerRect: DOMRect | null = null;
 
   constructor(container: HTMLElement, config: Partial<TooltipConfig> = {}) {
     this.config = { ...DEFAULT_TOOLTIP_CONFIG, ...config };
@@ -144,6 +146,7 @@ export class Tooltip {
     }
 
     this.isVisible = true;
+    this.cachedContainerRect = null;
     this.updatePosition(event);
     this.element.style.opacity = '1';
   }
@@ -154,7 +157,8 @@ export class Tooltip {
     const container = this.element.parentElement;
     if (!container) return;
 
-    const containerRect = container.getBoundingClientRect();
+    const containerRect = this.cachedContainerRect ?? container.getBoundingClientRect();
+    this.cachedContainerRect = containerRect;
     const tooltipRect = this.element.getBoundingClientRect();
     const { offsetX, offsetY } = this.config;
 
@@ -219,8 +223,8 @@ export class Tooltip {
   }
 
   private defaultLinkFormatter(link: ComputedLink): string {
-    const source = link.source as ComputedNode;
-    const target = link.target as ComputedNode;
+    const source = resolveNodeFromLink(link.source);
+    const target = resolveNodeFromLink(link.target);
     const formattedValue = this.formatNumber(link.value);
 
     return `

@@ -15,14 +15,12 @@ import type {
   PowerBISelectionId,
   DatasetMetadata,
 } from '../types';
-import { aggregateNumbers } from '../utils/aggregation';
+import { aggregateNumbers, type AggregationMethod } from '../utils/aggregation';
 
 type PowerBISankeyData = SankeyData & {
   nodes: PowerBISankeyNode[];
   links: PowerBISankeyLink[];
 };
-
-type AggregationMethod = 'sum' | 'average' | 'max' | 'min';
 
 export interface DataViewConverterOptions {
   columnMapping?: PowerBIColumnMapping;
@@ -258,7 +256,7 @@ export function aggregateLinks(
   const linkMap = new Map<string, PowerBISankeyLink[]>();
 
   for (const link of links) {
-    const key = `${link.source}|${link.target}`;
+    const key = `${link.source}\0${link.target}`;
     const group = linkMap.get(key);
     if (group) {
       group.push(link);
@@ -301,7 +299,7 @@ export function applyHighlights(
   return {
     ...data,
     links: data.links.map((link) => {
-      const key = `${link.source}|${link.target}`;
+      const key = `${link.source}\0${link.target}`;
       const highlightValue = highlights.get(key);
       if (highlightValue === undefined) return link;
       return { ...link, highlightValue };

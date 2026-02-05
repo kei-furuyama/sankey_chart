@@ -135,6 +135,10 @@ function createDropdown(
   };
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 function extractColor(obj: any, key: string, fallback: string): string {
   return obj?.[key]?.solid?.color ?? fallback;
 }
@@ -153,19 +157,19 @@ export function parseSettings(dataView: any): VisualSettings {
   const { nodeSettings: node, linkSettings: link, labelSettings: label, animationSettings: animation } = objects;
 
   if (node) {
-    settings.nodeSettings.width = node.width ?? settings.nodeSettings.width;
-    settings.nodeSettings.padding = node.padding ?? settings.nodeSettings.padding;
+    settings.nodeSettings.width = clamp(node.width ?? settings.nodeSettings.width, 5, 100);
+    settings.nodeSettings.padding = clamp(node.padding ?? settings.nodeSettings.padding, 0, 50);
     settings.nodeSettings.defaultColor = extractColor(node, 'defaultColor', settings.nodeSettings.defaultColor);
   }
 
   if (link) {
     settings.linkSettings.colorMode = link.colorMode ?? settings.linkSettings.colorMode;
-    settings.linkSettings.opacity = link.opacity ?? settings.linkSettings.opacity;
+    settings.linkSettings.opacity = clamp(link.opacity ?? settings.linkSettings.opacity, 0, 100);
   }
 
   if (label) {
     settings.labelSettings.show = label.show ?? settings.labelSettings.show;
-    settings.labelSettings.fontSize = label.fontSize ?? settings.labelSettings.fontSize;
+    settings.labelSettings.fontSize = clamp(label.fontSize ?? settings.labelSettings.fontSize, 8, 24);
     settings.labelSettings.color = extractColor(label, 'color', settings.labelSettings.color);
   }
 

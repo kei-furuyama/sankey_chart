@@ -114,4 +114,6 @@ export {
   isValidInputLink,
   isValidInputData,
   isComputedNode,
+  resolveNodeFromLink,
+  tryResolveNodeFromLink,
 } from './utilities.js';

@@ -25,6 +25,7 @@ import type {
   ComputedNode,
   ComputedLink,
 } from '../types';
+import { tryResolveNodeFromLink } from '../types';
 import { getLinkSortFunction } from '../utils/link-sort';
 
 function fnv1aHash(str: string): string {
@@ -199,16 +200,14 @@ export class SankeyLayout {
 
     // 入力側のノード
     node.targetLinks?.forEach((link) => {
-      if (typeof link.source === 'object') {
-        connected.add(link.source as ComputedNode);
-      }
+      const source = tryResolveNodeFromLink(link.source);
+      if (source) connected.add(source);
     });
 
     // 出力側のノード
     node.sourceLinks?.forEach((link) => {
-      if (typeof link.target === 'object') {
-        connected.add(link.target as ComputedNode);
-      }
+      const target = tryResolveNodeFromLink(link.target);
+      if (target) connected.add(target);
     });
 
     return connected;
@@ -258,7 +257,7 @@ export class SankeyLayout {
     for (const n of data.nodes) parts.push(n.id);
     for (const l of data.links) parts.push(`${l.source}-${l.target}-${l.value}`);
     parts.push(`${width}_${height}_${layout.nodeWidth}_${layout.nodePadding}_${layout.nodeAlignment}_${layout.iterations}_${layout.linkSort ?? 'ascending'}`);
-    return fnv1aHash(parts.join('|'));
+    return fnv1aHash(parts.join('\0'));
   }
 }
 

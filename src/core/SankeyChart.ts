@@ -11,6 +11,7 @@
 import type {
   SankeyData,
   SankeyChartConfig,
+  PowerBIConfig,
   LegacyEventHandlers,
   ComputedNode,
   ComputedLink,
@@ -34,6 +35,7 @@ export class SankeyChart {
   private tooltip: Tooltip | null = null;
   private resizeManager: ResizeManager | null = null;
   private tooltipMoveHandler: ((event: MouseEvent) => void) | null = null;
+  private tooltipRafId: number | null = null;
   private currentData: SankeyData | null = null;
   private eventHandlers: LegacyEventHandlers = {};
 
@@ -101,10 +103,14 @@ export class SankeyChart {
       };
     }
 
-    const powerbi =
-      base.powerbi || overrides.powerbi
-        ? { ...(base.powerbi ?? {}), ...(overrides.powerbi ?? {}) }
-        : undefined;
+    let powerbi: PowerBIConfig | undefined;
+    if (base.powerbi && overrides.powerbi) {
+      powerbi = { ...base.powerbi, ...overrides.powerbi };
+    } else if (base.powerbi) {
+      powerbi = { ...base.powerbi };
+    } else if (overrides.powerbi) {
+      powerbi = overrides.powerbi as PowerBIConfig;
+    }
 
     return {
       ...base,
@@ -151,7 +157,11 @@ export class SankeyChart {
 
     if (!this.tooltipMoveHandler) {
       this.tooltipMoveHandler = (event: MouseEvent) => {
-        tooltip.updatePosition(event);
+        if (this.tooltipRafId) return;
+        this.tooltipRafId = requestAnimationFrame(() => {
+          tooltip.updatePosition(event);
+          this.tooltipRafId = null;
+        });
       };
       this.container.addEventListener('mousemove', this.tooltipMoveHandler);
     }
@@ -255,6 +265,10 @@ export class SankeyChart {
    * リソースを破棄
    */
   destroy(): void {
+    if (this.tooltipRafId) {
+      cancelAnimationFrame(this.tooltipRafId);
+      this.tooltipRafId = null;
+    }
     if (this.tooltipMoveHandler) {
       this.container.removeEventListener('mousemove', this.tooltipMoveHandler);
       this.tooltipMoveHandler = null;
