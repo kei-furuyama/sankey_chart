@@ -8,6 +8,7 @@
  */
 
 import type { SankeyData, SankeyNodeDatum, SankeyLinkDatum } from '../types';
+import { aggregateNumbers } from '../utils/aggregation';
 
 export interface DataView {
   categorical?: DataViewCategorical;
@@ -105,7 +106,7 @@ export function transformDataView(
     return null;
   }
 
-  const linkMap = new Map<string, SankeyLinkDatum>();
+  const linkBuckets = new Map<string, { source: string; target: string; values: number[] }>();
   const nodeSet = new Set<string>();
 
   for (let i = 0; i < sourceColumn.values.length; i++) {
@@ -120,12 +121,12 @@ export function transformDataView(
     nodeSet.add(target);
 
     const linkKey = `${source}||${target}`;
-    const existing = linkMap.get(linkKey);
+    const existing = linkBuckets.get(linkKey);
 
     if (existing) {
-      existing.value = aggregateValues(existing.value, value, opts.aggregation);
+      existing.values.push(value);
     } else {
-      linkMap.set(linkKey, { source, target, value });
+      linkBuckets.set(linkKey, { source, target, values: [value] });
     }
   }
 
@@ -135,7 +136,13 @@ export function transformDataView(
     color: opts.colorScheme[index % opts.colorScheme.length],
   }));
 
-  return { nodes, links: Array.from(linkMap.values()) };
+  const links: SankeyLinkDatum[] = Array.from(linkBuckets.values()).map((bucket) => ({
+    source: bucket.source,
+    target: bucket.target,
+    value: aggregateNumbers(bucket.values, opts.aggregation),
+  }));
+
+  return { nodes, links };
 }
 
 function findCategoryByRole(
@@ -151,17 +158,6 @@ function findValueByRole(
 ): DataViewValueColumn | undefined {
   if (!values) return undefined;
   return values.find((col) => col.source.roles?.[role]) ?? values[0];
-}
-
-function aggregateValues(
-  existing: number,
-  newValue: number,
-  method: AggregationMethod
-): number {
-  if (method === 'sum') return existing + newValue;
-  if (method === 'max') return Math.max(existing, newValue);
-  if (method === 'min') return Math.min(existing, newValue);
-  return (existing + newValue) / 2;
 }
 
 /**

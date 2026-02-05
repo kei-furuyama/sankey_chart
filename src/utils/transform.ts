@@ -21,6 +21,8 @@ import type {
   FilterCriteria,
   AggregationConfig,
 } from '../types';
+import { DEFAULT_TRANSFORM_OPTIONS } from '../types';
+import { aggregateNumbers } from './aggregation';
 
 // ============================================================
 // メイン変換関数
@@ -47,16 +49,17 @@ export function transformToSankeyData(
   input: SankeyInputData,
   options: Partial<TransformOptions> = {}
 ): SankeyData {
+  const overrides: Partial<TransformOptions> = {};
+  (Object.entries(options) as Array<[keyof TransformOptions, TransformOptions[keyof TransformOptions]]>)
+    .forEach(([key, value]) => {
+      if (value !== undefined) {
+        overrides[key] = value;
+      }
+    });
+
   const opts: TransformOptions = {
-    missingValueStrategy: options.missingValueStrategy ?? 'error',
-    defaultValue: options.defaultValue,
-    minValue: options.minValue,
-    aggregateDuplicates: options.aggregateDuplicates ?? true,
-    aggregationMethod: options.aggregationMethod ?? 'sum',
-    inferNodes: options.inferNodes ?? true,
-    removeOrphanNodes: options.removeOrphanNodes ?? false,
-    normalizeValues: options.normalizeValues ?? false,
-    nodeNameResolver: options.nodeNameResolver,
+    ...DEFAULT_TRANSFORM_OPTIONS,
+    ...overrides,
   };
 
   // 1. リンクの処理
@@ -195,11 +198,9 @@ function extractMetadata(
 // 重複リンクの集計
 // ============================================================
 
-type AggregationMethod = TransformOptions['aggregationMethod'];
-
 function aggregateDuplicateLinks(
   links: SankeyLinkDatum[],
-  method: AggregationMethod
+  method: TransformOptions['aggregationMethod']
 ): SankeyLinkDatum[] {
   const linkMap = new Map<string, SankeyLinkDatum[]>();
 
@@ -221,7 +222,7 @@ function aggregateDuplicateLinks(
     }
 
     const values = group.map((l) => l.value);
-    const aggregatedValue = aggregateValues(values, method);
+    const aggregatedValue = aggregateNumbers(values, method);
     const first = group.at(0)!;
 
     aggregated.push({
@@ -236,25 +237,6 @@ function aggregateDuplicateLinks(
   });
 
   return aggregated;
-}
-
-function aggregateValues(values: number[], method: AggregationMethod): number {
-  switch (method) {
-    case 'sum':
-      return values.reduce((a, b) => a + b, 0);
-    case 'average':
-      return values.reduce((a, b) => a + b, 0) / values.length;
-    case 'max':
-      return Math.max(...values);
-    case 'min':
-      return Math.min(...values);
-    case 'first':
-      return values.at(0)!;
-    case 'last':
-      return values.at(-1)!;
-    default:
-      return values.reduce((a, b) => a + b, 0);
-  }
 }
 
 // ============================================================
@@ -316,9 +298,13 @@ function generateNodes(
 // ============================================================
 
 function normalizeLinks(links: SankeyLinkDatum[]): SankeyLinkDatum[] {
-  const maxValue = Math.max(...links.map((l) => l.value));
+  if (links.length === 0) {
+    return links;
+  }
 
-  if (maxValue === 0) {
+  const maxValue = links.reduce((max, link) => Math.max(max, link.value), 0);
+
+  if (maxValue <= 0) {
     return links;
   }
 
@@ -739,7 +725,7 @@ export function aggregateSankeyData(data: SankeyData, config: AggregationConfig)
     const parts = key.split('|');
     const source = parts.at(0)!;
     const target = parts.at(1)!;
-    const aggregatedValue = aggregateValues(values, config.valueAggregation);
+    const aggregatedValue = aggregateNumbers(values, config.valueAggregation);
 
     newLinks.push({
       source,
@@ -798,4 +784,3 @@ export function toD3SankeyFormat(data: SankeyData): {
 
   return { nodes, links };
 }
-

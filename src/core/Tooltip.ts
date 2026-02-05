@@ -8,6 +8,29 @@
  */
 
 import type { ComputedNode, ComputedLink } from '../types';
+import {
+  NUMBER_FORMAT_MILLION,
+  NUMBER_FORMAT_THOUSAND,
+  TOOLTIP_ARROW_OPACITY,
+  TOOLTIP_BACKGROUND_COLOR,
+  TOOLTIP_BORDER_COLOR,
+  TOOLTIP_BORDER_RADIUS,
+  TOOLTIP_BOX_SHADOW,
+  TOOLTIP_FADE_DURATION,
+  TOOLTIP_FONT_FAMILY,
+  TOOLTIP_FONT_SIZE,
+  TOOLTIP_HEADER_BORDER,
+  TOOLTIP_HIDE_DELAY,
+  TOOLTIP_LINE_HEIGHT,
+  TOOLTIP_MAX_WIDTH,
+  TOOLTIP_MUTED_OPACITY,
+  TOOLTIP_OFFSET_X,
+  TOOLTIP_OFFSET_Y,
+  TOOLTIP_PADDING,
+  TOOLTIP_ROW_GAP,
+  TOOLTIP_TEXT_COLOR,
+  TOOLTIP_Z_INDEX,
+} from './constants';
 
 export interface TooltipConfig {
   offsetX: number;
@@ -25,23 +48,23 @@ export interface TooltipConfig {
 export type TooltipFormatter<T> = (data: T) => string | HTMLElement;
 
 const DEFAULT_TOOLTIP_CONFIG: TooltipConfig = {
-  offsetX: 12,
-  offsetY: 12,
-  backgroundColor: 'rgba(0, 0, 0, 0.85)',
-  textColor: '#fff',
-  borderColor: 'rgba(255, 255, 255, 0.2)',
-  fontSize: 13,
-  padding: 10,
-  borderRadius: 4,
-  maxWidth: 300,
-  fadeDuration: 150,
+  offsetX: TOOLTIP_OFFSET_X,
+  offsetY: TOOLTIP_OFFSET_Y,
+  backgroundColor: TOOLTIP_BACKGROUND_COLOR,
+  textColor: TOOLTIP_TEXT_COLOR,
+  borderColor: TOOLTIP_BORDER_COLOR,
+  fontSize: TOOLTIP_FONT_SIZE,
+  padding: TOOLTIP_PADDING,
+  borderRadius: TOOLTIP_BORDER_RADIUS,
+  maxWidth: TOOLTIP_MAX_WIDTH,
+  fadeDuration: TOOLTIP_FADE_DURATION,
 };
 
 // Reusable inline style fragments for tooltip HTML content
-const STYLE_ROW = 'display: flex; justify-content: space-between; gap: 16px;';
-const STYLE_LABEL = 'opacity: 0.8;';
+const STYLE_ROW = `display: flex; justify-content: space-between; gap: ${TOOLTIP_ROW_GAP};`;
+const STYLE_LABEL = `opacity: ${TOOLTIP_MUTED_OPACITY};`;
 const STYLE_HEADER_NODE =
-  'font-weight: 600; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 4px;';
+  `font-weight: 600; margin-bottom: 4px; border-bottom: ${TOOLTIP_HEADER_BORDER}; padding-bottom: 4px;`;
 const STYLE_HEADER_LINK =
   'display: flex; align-items: center; gap: 8px; margin-bottom: 4px;';
 
@@ -70,7 +93,7 @@ export class Tooltip {
     tooltip.className = 'sankey-tooltip';
     tooltip.style.cssText = [
       'position: absolute',
-      'z-index: 1000',
+      `z-index: ${TOOLTIP_Z_INDEX}`,
       'pointer-events: none',
       'opacity: 0',
       `background-color: ${backgroundColor}`,
@@ -80,10 +103,10 @@ export class Tooltip {
       `padding: ${padding}px`,
       `border-radius: ${borderRadius}px`,
       `max-width: ${maxWidth}px`,
-      'box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3)',
+      `box-shadow: ${TOOLTIP_BOX_SHADOW}`,
       `transition: opacity ${fadeDuration}ms ease-out`,
-      "font-family: 'Segoe UI', system-ui, sans-serif",
-      'line-height: 1.4',
+      `font-family: ${TOOLTIP_FONT_FAMILY}`,
+      `line-height: ${TOOLTIP_LINE_HEIGHT}`,
     ].join('; ');
 
     if (getComputedStyle(container).position === 'static') {
@@ -161,7 +184,7 @@ export class Tooltip {
     this.hideTimeout = setTimeout(() => {
       this.element.style.opacity = '0';
       this.isVisible = false;
-    }, 50);
+    }, TOOLTIP_HIDE_DELAY);
   }
 
   private defaultNodeFormatter(node: ComputedNode): string {
@@ -203,7 +226,7 @@ export class Tooltip {
     return `
       <div style="${STYLE_HEADER_LINK}">
         <span style="font-weight: 600;">${this.escapeHtml(source.name)}</span>
-        <span style="opacity: 0.6;">\u2192</span>
+        <span style="opacity: ${TOOLTIP_ARROW_OPACITY};">\u2192</span>
         <span style="font-weight: 600;">${this.escapeHtml(target.name)}</span>
       </div>
       <div style="${STYLE_ROW}">
@@ -213,8 +236,12 @@ export class Tooltip {
   }
 
   private formatNumber(value: number): string {
-    if (value >= 1_000_000) return (value / 1_000_000).toFixed(1) + 'M';
-    if (value >= 1_000) return (value / 1_000).toFixed(1) + 'K';
+    if (value >= NUMBER_FORMAT_MILLION) {
+      return (value / NUMBER_FORMAT_MILLION).toFixed(1) + 'M';
+    }
+    if (value >= NUMBER_FORMAT_THOUSAND) {
+      return (value / NUMBER_FORMAT_THOUSAND).toFixed(1) + 'K';
+    }
     return value.toLocaleString();
   }
 

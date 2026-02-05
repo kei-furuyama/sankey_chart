@@ -5,8 +5,19 @@ import type {
   ComputedNode,
   ComputedLink,
   LegacyEventHandlers,
+  SankeyData,
 } from '../types';
 import { SankeyLayout } from './SankeyLayout';
+import {
+  LABEL_OFFSET_X,
+  LABEL_VERTICAL_ALIGN,
+  MIN_STROKE_WIDTH,
+  NODE_BORDER_RADIUS,
+  SVG_ARIA_LABEL,
+  SVG_CLASS,
+  SVG_PRESERVE_ASPECT_RATIO,
+  SVG_ROLE,
+} from './constants';
 
 const EASING_MAP = {
   linear: d3.easeLinear,
@@ -43,15 +54,43 @@ export class SankeyRenderer {
       .attr('width', this.config.width)
       .attr('height', this.config.height)
       .attr('viewBox', `0 0 ${this.config.width} ${this.config.height}`)
-      .attr('preserveAspectRatio', 'xMidYMid meet')
-      .attr('class', 'sankey-chart')
-      .attr('role', 'img')
-      .attr('aria-label', 'Sankey Diagram');
+      .attr('preserveAspectRatio', SVG_PRESERVE_ASPECT_RATIO)
+      .attr('class', SVG_CLASS)
+      .attr('role', SVG_ROLE)
+      .attr('aria-label', SVG_ARIA_LABEL);
 
     this.svg.append('defs');
     this.svg.append('g').attr('class', 'sankey-links');
     this.svg.append('g').attr('class', 'sankey-nodes');
     this.svg.append('g').attr('class', 'sankey-labels');
+  }
+
+  private updateSvgSize(): void {
+    if (!this.svg) return;
+    this.svg
+      .attr('width', this.config.width)
+      .attr('height', this.config.height)
+      .attr('viewBox', `0 0 ${this.config.width} ${this.config.height}`);
+  }
+
+  private getLinkKey(link: ComputedLink): string {
+    return `${(link.source as ComputedNode).id}-${(link.target as ComputedNode).id}`;
+  }
+
+  private getGradientId(link: ComputedLink): string {
+    return `gradient-${this.getLinkKey(link)}`;
+  }
+
+  private getLinkStrokeWidth(link: ComputedLink): number {
+    return Math.max(MIN_STROKE_WIDTH, link.width ?? 0);
+  }
+
+  private getNodeWidth(node: ComputedNode): number {
+    return (node.x1 ?? 0) - (node.x0 ?? 0);
+  }
+
+  private getNodeHeight(node: ComputedNode): number {
+    return (node.y1 ?? 0) - (node.y0 ?? 0);
   }
 
   private getAnimationDuration(): number {
@@ -85,14 +124,11 @@ export class SankeyRenderer {
     this.layout.updateConfig(this.config);
 
     if (this.config.width !== oldSize.width || this.config.height !== oldSize.height) {
-      this.svg
-        ?.attr('width', this.config.width)
-        .attr('height', this.config.height)
-        .attr('viewBox', `0 0 ${this.config.width} ${this.config.height}`);
+      this.updateSvgSize();
     }
   }
 
-  render(data: { nodes: any[]; links: any[] }): void {
+  render(data: SankeyData): void {
     if (!this.svg) return;
 
     this.graph = this.layout.compute(data);
@@ -111,7 +147,7 @@ export class SankeyRenderer {
 
     const linkSelection = linksGroup
       .selectAll<SVGPathElement, ComputedLink>('.sankey-link')
-      .data(links, (d) => `${(d.source as ComputedNode).id}-${(d.target as ComputedNode).id}`);
+      .data(links, (d) => this.getLinkKey(d));
 
     linkSelection
       .exit()
@@ -126,7 +162,7 @@ export class SankeyRenderer {
       .attr('class', 'sankey-link')
       .attr('d', pathGenerator)
       .attr('fill', 'none')
-      .attr('stroke-width', (d) => Math.max(1, d.width ?? 0))
+      .attr('stroke-width', (d) => this.getLinkStrokeWidth(d))
       .style('opacity', 0);
 
     if (animation.enabled && animation.enterAnimation) {
@@ -154,7 +190,7 @@ export class SankeyRenderer {
     allLinks
       .transition(this.createTransition() as any)
       .attr('d', pathGenerator)
-      .attr('stroke-width', (d) => Math.max(1, d.width ?? 0))
+      .attr('stroke-width', (d) => this.getLinkStrokeWidth(d))
       .attr('stroke-dashoffset', 0)
       .style('opacity', style.linkOpacity);
   }
@@ -181,10 +217,10 @@ export class SankeyRenderer {
       .attr('class', 'sankey-node')
       .attr('x', (d) => d.x0 ?? 0)
       .attr('y', (d) => d.y0 ?? 0)
-      .attr('width', (d) => (d.x1 ?? 0) - (d.x0 ?? 0))
+      .attr('width', (d) => this.getNodeWidth(d))
       .attr('height', 0)
-      .attr('rx', 2)
-      .attr('ry', 2);
+      .attr('rx', NODE_BORDER_RADIUS)
+      .attr('ry', NODE_BORDER_RADIUS);
 
     const allNodes = enterNodes.merge(nodeSelection);
 
@@ -205,8 +241,8 @@ export class SankeyRenderer {
       .transition(this.createTransition() as any)
       .attr('x', (d) => d.x0 ?? 0)
       .attr('y', (d) => d.y0 ?? 0)
-      .attr('width', (d) => (d.x1 ?? 0) - (d.x0 ?? 0))
-      .attr('height', (d) => (d.y1 ?? 0) - (d.y0 ?? 0));
+      .attr('width', (d) => this.getNodeWidth(d))
+      .attr('height', (d) => this.getNodeHeight(d));
   }
 
   private renderLabels(nodes: ComputedNode[]): void {
@@ -236,15 +272,15 @@ export class SankeyRenderer {
       .attr('font-size', style.labelFontSize)
       .attr('font-family', style.labelFontFamily)
       .attr('fill', style.labelColor)
-      .attr('dy', '0.35em')
+      .attr('dy', LABEL_VERTICAL_ALIGN)
       .text((d) => d.name);
 
     allLabels
       .attr('x', (d) => {
         if (this.isLabelOnRight(d)) {
-          return (d.x1 ?? 0) + 6;
+          return (d.x1 ?? 0) + LABEL_OFFSET_X;
         }
-        return (d.x0 ?? 0) - 6;
+        return (d.x0 ?? 0) - LABEL_OFFSET_X;
       })
       .attr('text-anchor', (d) => (this.isLabelOnRight(d) ? 'start' : 'end'))
       .attr('y', (d) => ((d.y0 ?? 0) + (d.y1 ?? 0)) / 2);
@@ -259,14 +295,14 @@ export class SankeyRenderer {
 
     const gradients = defs
       .selectAll<SVGLinearGradientElement, ComputedLink>('linearGradient')
-      .data(links, (d) => `gradient-${(d.source as ComputedNode).id}-${(d.target as ComputedNode).id}`);
+      .data(links, (d) => this.getGradientId(d));
 
     gradients.exit().remove();
 
     const enterGradients = gradients
       .enter()
       .append('linearGradient')
-      .attr('id', (d) => `gradient-${(d.source as ComputedNode).id}-${(d.target as ComputedNode).id}`)
+      .attr('id', (d) => this.getGradientId(d))
       .attr('gradientUnits', 'userSpaceOnUse');
 
     const allGradients = enterGradients.merge(gradients);
@@ -303,7 +339,7 @@ export class SankeyRenderer {
       case 'target':
         return (link.target as ComputedNode).color ?? style.nodeColor;
       case 'gradient':
-        return `url(#gradient-${(link.source as ComputedNode).id}-${(link.target as ComputedNode).id})`;
+        return `url(#${this.getGradientId(link)})`;
       case 'fixed':
       default:
         return style.linkColor;

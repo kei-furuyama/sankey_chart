@@ -15,6 +15,7 @@ import type {
   PowerBISelectionId,
   DatasetMetadata,
 } from '../types';
+import { aggregateNumbers } from '../utils/aggregation';
 
 type PowerBISankeyData = SankeyData & {
   nodes: PowerBISankeyNode[];
@@ -247,13 +248,6 @@ function createMetadata(): DatasetMetadata {
   };
 }
 
-function computeAggregatedValue(values: number[], method: AggregationMethod): number {
-  if (method === 'sum') return values.reduce((a, b) => a + b, 0);
-  if (method === 'average') return values.reduce((a, b) => a + b, 0) / values.length;
-  if (method === 'max') return Math.max(...values);
-  return Math.min(...values);
-}
-
 /**
  * Aggregate links that share the same source-target pair.
  */
@@ -285,7 +279,7 @@ export function aggregateLinks(
     const values = group.map((l) => l.value);
     aggregated.push({
       ...first,
-      value: computeAggregatedValue(values, method),
+      value: aggregateNumbers(values, method),
       metadata: {
         ...first.metadata,
         aggregatedFrom: group.length,
