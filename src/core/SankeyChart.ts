@@ -33,6 +33,7 @@ export class SankeyChart {
   private renderer: SankeyRenderer;
   private tooltip: Tooltip | null = null;
   private resizeManager: ResizeManager | null = null;
+  private tooltipMoveHandler: ((event: MouseEvent) => void) | null = null;
   private currentData: SankeyData | null = null;
   private eventHandlers: LegacyEventHandlers = {};
 
@@ -41,7 +42,7 @@ export class SankeyChart {
     this.container = this.resolveContainer(container);
 
     // 設定をマージ
-    this.config = this.mergeConfig(options.config);
+    this.config = this.mergeConfig(defaultConfig, options.config);
 
     // レンダラーを初期化
     this.renderer = createSankeyRenderer(this.container, this.config);
@@ -83,17 +84,38 @@ export class SankeyChart {
   /**
    * 設定をマージ
    */
-  private mergeConfig(config?: Partial<SankeyChartConfig>): SankeyChartConfig {
-    if (!config) return { ...defaultConfig };
+  private mergeConfig(
+    base: SankeyChartConfig,
+    overrides?: Partial<SankeyChartConfig>
+  ): SankeyChartConfig {
+    if (!overrides) {
+      return {
+        ...base,
+        margin: { ...base.margin },
+        layout: { ...base.layout },
+        interaction: { ...base.interaction },
+        animation: { ...base.animation },
+        style: { ...base.style },
+        performance: { ...base.performance },
+        powerbi: base.powerbi ? { ...base.powerbi } : undefined,
+      };
+    }
+
+    const powerbi =
+      base.powerbi || overrides.powerbi
+        ? { ...(base.powerbi ?? {}), ...(overrides.powerbi ?? {}) }
+        : undefined;
 
     return {
-      ...defaultConfig,
-      ...config,
-      margin: { ...defaultConfig.margin, ...config.margin },
-      layout: { ...defaultConfig.layout, ...config.layout },
-      interaction: { ...defaultConfig.interaction, ...config.interaction },
-      animation: { ...defaultConfig.animation, ...config.animation },
-      style: { ...defaultConfig.style, ...config.style },
+      ...base,
+      ...overrides,
+      margin: { ...base.margin, ...overrides.margin },
+      layout: { ...base.layout, ...overrides.layout },
+      interaction: { ...base.interaction, ...overrides.interaction },
+      animation: { ...base.animation, ...overrides.animation },
+      style: { ...base.style, ...overrides.style },
+      performance: { ...base.performance, ...overrides.performance },
+      powerbi,
     };
   }
 
@@ -127,9 +149,12 @@ export class SankeyChart {
       },
     });
 
-    this.container.addEventListener('mousemove', (event) => {
-      tooltip.updatePosition(event);
-    });
+    if (!this.tooltipMoveHandler) {
+      this.tooltipMoveHandler = (event: MouseEvent) => {
+        tooltip.updatePosition(event);
+      };
+      this.container.addEventListener('mousemove', this.tooltipMoveHandler);
+    }
   }
 
   /**
@@ -144,9 +169,7 @@ export class SankeyChart {
       this.renderer.updateConfig({ width, height });
 
       // データがある場合は再描画
-      if (this.currentData) {
-        this.renderer.render(this.currentData);
-      }
+      this.renderIfData();
     });
   }
 
@@ -197,13 +220,11 @@ export class SankeyChart {
    * 設定を更新
    */
   updateConfig(config: Partial<SankeyChartConfig>): void {
-    this.config = this.mergeConfig({ ...this.config, ...config });
+    this.config = this.mergeConfig(this.config, config);
     this.renderer.updateConfig(this.config);
 
     // データがある場合は再描画
-    if (this.currentData) {
-      this.renderer.render(this.currentData);
-    }
+    this.renderIfData();
   }
 
   /**
@@ -234,9 +255,19 @@ export class SankeyChart {
    * リソースを破棄
    */
   destroy(): void {
+    if (this.tooltipMoveHandler) {
+      this.container.removeEventListener('mousemove', this.tooltipMoveHandler);
+      this.tooltipMoveHandler = null;
+    }
     this.renderer.destroy();
     this.tooltip?.destroy();
     this.resizeManager?.destroy();
+  }
+
+  private renderIfData(): void {
+    if (this.currentData) {
+      this.renderer.render(this.currentData);
+    }
   }
 }
 
