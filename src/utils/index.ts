@@ -28,3 +28,6 @@ export {
 } from './transform';
 
 export { getLinkSortFunction } from './link-sort';
+
+export { aggregateNumbers } from './aggregation';
+export type { AggregationMethod } from './aggregation';
