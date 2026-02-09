@@ -195,11 +195,37 @@
           "displayNameKey": "Visual_LabelColor",
           "type": { "fill": { "solid": { "color": true } } }
         },
+        "colorMode": {
+          "displayName": "Color Mode",
+          "displayNameKey": "Visual_LabelColorMode",
+          "type": {
+            "enumeration": [
+              { "value": "single", "displayName": "Single Color" },
+              { "value": "layer", "displayName": "By Layer" }
+            ]
+          }
+        },
         "fontFamily": {
           "displayName": "Font",
           "displayNameKey": "Visual_LabelFontFamily",
           "type": { "formatting": { "fontFamily": true } }
         }
+      }
+    },
+    "labelLayerColors": {
+      "displayName": "Label Layer Colors",
+      "displayNameKey": "Visual_LabelLayerColors",
+      "properties": {
+        "layer0": { "displayName": "Layer 1", "displayNameKey": "Visual_LabelLayer1", "type": { "fill": { "solid": { "color": true } } } },
+        "layer1": { "displayName": "Layer 2", "displayNameKey": "Visual_LabelLayer2", "type": { "fill": { "solid": { "color": true } } } },
+        "layer2": { "displayName": "Layer 3", "displayNameKey": "Visual_LabelLayer3", "type": { "fill": { "solid": { "color": true } } } },
+        "layer3": { "displayName": "Layer 4", "displayNameKey": "Visual_LabelLayer4", "type": { "fill": { "solid": { "color": true } } } },
+        "layer4": { "displayName": "Layer 5", "displayNameKey": "Visual_LabelLayer5", "type": { "fill": { "solid": { "color": true } } } },
+        "layer5": { "displayName": "Layer 6", "displayNameKey": "Visual_LabelLayer6", "type": { "fill": { "solid": { "color": true } } } },
+        "layer6": { "displayName": "Layer 7", "displayNameKey": "Visual_LabelLayer7", "type": { "fill": { "solid": { "color": true } } } },
+        "layer7": { "displayName": "Layer 8", "displayNameKey": "Visual_LabelLayer8", "type": { "fill": { "solid": { "color": true } } } },
+        "layer8": { "displayName": "Layer 9", "displayNameKey": "Visual_LabelLayer9", "type": { "fill": { "solid": { "color": true } } } },
+        "layer9": { "displayName": "Layer 10", "displayNameKey": "Visual_LabelLayer10", "type": { "fill": { "solid": { "color": true } } } }
       }
     },
     "dataLabelSettings": {

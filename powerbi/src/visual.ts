@@ -67,11 +67,13 @@ type ComputedLink = SankeyLink<SankeyNodeDatum, SankeyLinkDatum>;
 type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'inputOrder' | 'none';
 type NodeColorMode = 'single' | 'category' | 'layer';
 type LinkColorMode = 'source' | 'target' | 'gradient' | 'fixed' | 'layer';
+type LabelColorMode = 'single' | 'layer';
 type DataLabelDisplayMode = 'value' | 'percentage' | 'both';
 
 const VALID_LINK_SORT_MODES: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
 const VALID_NODE_COLOR_MODES: NodeColorMode[] = ['single', 'category', 'layer'];
 const VALID_LINK_COLOR_MODES: LinkColorMode[] = ['source', 'target', 'gradient', 'fixed', 'layer'];
+const VALID_LABEL_COLOR_MODES: LabelColorMode[] = ['single', 'layer'];
 
 /** Gap in px between a node rect edge and its label text */
 const LABEL_OFFSET = 6;
@@ -97,6 +99,7 @@ interface VisualSettings {
   linkLabelFontSize: number;
   labelFontSize: number;
   labelColor: string;
+  labelColorMode: LabelColorMode;
   labelFontFamily: string;
   showLabels: boolean;
   showDataLabels: boolean;
@@ -127,6 +130,7 @@ const DEFAULT_SETTINGS: VisualSettings = {
   linkLabelFontSize: 10,
   labelFontSize: 12,
   labelColor: '#333333',
+  labelColorMode: 'single',
   labelFontFamily: "'Segoe UI', sans-serif",
   showLabels: true,
   showDataLabels: false,
@@ -307,6 +311,16 @@ class LabelSettingsCard extends formattingSettings.SimpleCard {
     value: { value: DEFAULT_SETTINGS.labelColor },
   });
 
+  colorMode = new formattingSettings.ItemDropdown({
+    name: 'colorMode',
+    displayName: 'Color Mode',
+    items: [
+      { value: 'single', displayName: 'Single Color' },
+      { value: 'layer', displayName: 'By Layer' },
+    ],
+    value: { value: 'single', displayName: 'Single Color' },
+  });
+
   fontFamily = new formattingSettings.FontPicker({
     name: 'fontFamily',
     displayName: 'Font',
@@ -316,7 +330,7 @@ class LabelSettingsCard extends formattingSettings.SimpleCard {
   name: string = 'labelSettings';
   displayName: string = 'Node Labels';
   topLevelSlice: formattingSettings.ToggleSwitch = this.show;
-  slices: formattingSettings.Slice[] = [this.fontFamily, this.fontSize, this.color];
+  slices: formattingSettings.Slice[] = [this.fontFamily, this.fontSize, this.colorMode, this.color];
 }
 
 class DataLabelSettingsCard extends formattingSettings.SimpleCard {
@@ -518,6 +532,7 @@ function parseSettings(dataView: DataView): VisualSettings {
     linkLabelFontSize: (linkLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.linkLabelFontSize,
     labelFontSize: (labelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.labelFontSize,
     labelColor: extractFillColor(labelSettings?.color) ?? DEFAULT_SETTINGS.labelColor,
+    labelColorMode: extractValidatedDropdown(labelSettings?.colorMode, VALID_LABEL_COLOR_MODES, DEFAULT_SETTINGS.labelColorMode),
     labelFontFamily: (labelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.labelFontFamily,
     showLabels: (labelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLabels,
     showDataLabels: (dataLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showDataLabels,
@@ -711,6 +726,10 @@ export class Visual implements IVisual {
   // Node layer color state
   private userNodeLayerColors = new Map<number, string>();
   private currentNodeLayerDepths: number[] = [];
+
+  // Label layer color state
+  private userLabelLayerColors = new Map<number, string>();
+  private currentLabelLayerDepths: number[] = [];
 
   // Interaction state
   private allowInteractions: boolean = true;
@@ -964,6 +983,12 @@ export class Visual implements IVisual {
       dlCard.slices = [...baseSlices, dlCard.displayUnits, dlCard.decimalPlaces, dlCard.percentDecimalPlaces];
     }
 
+    // Show/hide label color picker based on label color mode
+    const lblCard = this.formattingSettings.labelSettingsCard;
+    lblCard.slices = this.settings.labelColorMode === 'single'
+      ? [lblCard.fontFamily, lblCard.fontSize, lblCard.colorMode, lblCard.color]
+      : [lblCard.fontFamily, lblCard.fontSize, lblCard.colorMode];
+
     // Show link defaultColor only in fixed mode
     const isFixed = this.settings.linkColorMode === 'fixed';
     const linkCard = this.formattingSettings.linkSettingsCard;
@@ -1077,6 +1102,41 @@ export class Visual implements IVisual {
       model.cards.push(nodeLayerColorsCard);
     }
 
+    // In label layer mode, add per-layer label color pickers
+    if (this.settings.labelColorMode === 'layer' && this.currentLabelLayerDepths.length > 0) {
+      const labelLayerSlices = this.currentLabelLayerDepths
+        .filter(d => d < MAX_LAYER_COLORS)
+        .map(depth => ({
+          uid: `labelLayerColors_layer${depth}`,
+          displayName: `Layer ${depth + 1}`,
+          control: {
+            type: powerbi.visuals.FormattingComponent.ColorPicker,
+            properties: {
+              descriptor: {
+                objectName: 'labelLayerColors',
+                propertyName: `layer${depth}`,
+                selector: null,
+              },
+              value: {
+                value: this.userLabelLayerColors.get(depth) ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length],
+              },
+            },
+          },
+        })) as unknown as powerbi.visuals.FormattingSlice[];
+
+      const labelLayerColorsCard: powerbi.visuals.FormattingCard = {
+        uid: 'labelLayerColorsCard',
+        displayName: 'Label Layer Colors',
+        groups: [{
+          uid: 'labelLayerColorsGroup',
+          displayName: '',
+          slices: labelLayerSlices,
+        }],
+      };
+
+      model.cards.push(labelLayerColorsCard);
+    }
+
     return model;
   }
 
@@ -1121,10 +1181,11 @@ export class Visual implements IVisual {
         );
 
         // Override dropdown values from formattingSettings (more reliable than dataView objects)
-        const { linkSettingsCard, nodeSettingsCard, dataLabelSettingsCard } = this.formattingSettings;
+        const { linkSettingsCard, nodeSettingsCard, dataLabelSettingsCard, labelSettingsCard } = this.formattingSettings;
         this.settings.linkSort = extractValidatedDropdown(linkSettingsCard.sortMode.value, VALID_LINK_SORT_MODES, this.settings.linkSort);
         this.settings.linkColorMode = extractValidatedDropdown(linkSettingsCard.colorMode.value, VALID_LINK_COLOR_MODES, this.settings.linkColorMode);
         this.settings.nodeColorMode = extractValidatedDropdown(nodeSettingsCard.colorMode.value, VALID_NODE_COLOR_MODES, this.settings.nodeColorMode);
+        this.settings.labelColorMode = extractValidatedDropdown(labelSettingsCard.colorMode.value, VALID_LABEL_COLOR_MODES, this.settings.labelColorMode);
         this.settings.displayUnits = Number(extractDropdownValue(dataLabelSettingsCard.displayUnits.value, '0')) || 0;
         this.settings.decimalPlaces = dataLabelSettingsCard.decimalPlaces.value ?? this.settings.decimalPlaces;
         this.settings.percentDecimalPlaces = dataLabelSettingsCard.percentDecimalPlaces.value ?? this.settings.percentDecimalPlaces;
@@ -1164,6 +1225,20 @@ export class Visual implements IVisual {
             }
           }
         }
+
+        // Extract user label layer colors from metadata objects (only in label layer mode)
+        this.userLabelLayerColors.clear();
+        if (this.settings.labelColorMode === 'layer') {
+          const labelLayerObjs = dataView.metadata?.objects?.labelLayerColors;
+          if (labelLayerObjs) {
+            for (let i = 0; i < MAX_LAYER_COLORS; i++) {
+              const color = extractFillColor(labelLayerObjs[`layer${i}`]);
+              if (color) {
+                this.userLabelLayerColors.set(i, color);
+              }
+            }
+          }
+        }
       }
 
       this.svg
@@ -1182,6 +1257,7 @@ export class Visual implements IVisual {
         this.currentNodes = [];
         this.currentLayerDepths = [];
         this.currentNodeLayerDepths = [];
+        this.currentLabelLayerDepths = [];
         this.focusedNodeIndex = -1;
         this.showLandingPage(viewport);
         this.target.style.pointerEvents = 'none';
@@ -1275,6 +1351,17 @@ export class Visual implements IVisual {
       this.currentNodeLayerDepths = [...depths].sort((a, b) => a - b);
     } else {
       this.currentNodeLayerDepths = [];
+    }
+
+    // Track unique depths for label layer color pickers
+    if (this.settings.labelColorMode === 'layer') {
+      const depths = new Set<number>();
+      for (const node of graph.nodes) {
+        depths.add(node.depth ?? 0);
+      }
+      this.currentLabelLayerDepths = [...depths].sort((a, b) => a - b);
+    } else {
+      this.currentLabelLayerDepths = [];
     }
 
     const layerTotals = this.calculateLayerTotals(graph.nodes);
@@ -1611,9 +1698,10 @@ export class Visual implements IVisual {
     nodeGroups: Selection<SVGGElement, ComputedNode, SVGGElement, unknown>,
     chartWidth: number
   ): void {
-    const { labelFontSize, labelColor, labelFontFamily } = this.settings;
+    const { labelFontSize, labelColor, labelColorMode, labelFontFamily } = this.settings;
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
+    const useLayerColor = !isHighContrast && labelColorMode === 'layer';
     const textColor = isHighContrast && hcColors ? hcColors.foreground : labelColor;
     const midPoint = chartWidth / 2;
     const labelOffset = LABEL_OFFSET;
@@ -1628,7 +1716,12 @@ export class Visual implements IVisual {
       .attr('text-anchor', d => (d.x0 ?? 0) < midPoint ? 'start' : 'end')
       .attr('font-family', labelFontFamily)
       .attr('font-size', labelFontSize)
-      .attr('fill', textColor)
+      .attr('fill', d => {
+        if (!useLayerColor) return textColor;
+        const depth = d.depth ?? 0;
+        return this.userLabelLayerColors.get(depth)
+          ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length];
+      })
       .text(d => d.name);
   }
 
@@ -1775,6 +1868,8 @@ export class Visual implements IVisual {
     this.userLayerColors.clear();
     this.currentNodeLayerDepths = [];
     this.userNodeLayerColors.clear();
+    this.currentLabelLayerDepths = [];
+    this.userLabelLayerColors.clear();
   }
 }
 
