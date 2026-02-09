@@ -76,6 +76,11 @@ const VALID_LINK_COLOR_MODES: LinkColorMode[] = ['source', 'target', 'gradient',
 /** Gap in px between a node rect edge and its label text */
 const LABEL_OFFSET = 6;
 const MAX_LAYER_COLORS = 10;
+/** Fixed default colours for layer modes so that changing one layer does not shift others */
+const DEFAULT_LAYER_PALETTE = [
+  '#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f',
+  '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac',
+];
 const VALID_DATA_LABEL_DISPLAY_MODES: DataLabelDisplayMode[] = ['value', 'percentage', 'both'];
 
 interface VisualSettings {
@@ -1018,7 +1023,7 @@ export class Visual implements IVisual {
                 selector: null,
               },
               value: {
-                value: this.userLayerColors.get(depth) ?? this.host.colorPalette.getColor(`layer-${depth}`).value,
+                value: this.userLayerColors.get(depth) ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length],
               },
             },
           },
@@ -1053,7 +1058,7 @@ export class Visual implements IVisual {
                 selector: null,
               },
               value: {
-                value: this.userNodeLayerColors.get(depth) ?? this.host.colorPalette.getColor(`node-layer-${depth}`).value,
+                value: this.userNodeLayerColors.get(depth) ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length],
               },
             },
           },
@@ -1267,7 +1272,7 @@ export class Visual implements IVisual {
       for (const node of graph.nodes) {
         const depth = node.depth ?? 0;
         node.color = this.userNodeLayerColors.get(depth)
-          ?? this.host.colorPalette.getColor(`node-layer-${depth}`).value;
+          ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length];
       }
       this.currentNodeLayerDepths = [...depths].sort((a, b) => a - b);
     } else {
@@ -1306,7 +1311,7 @@ export class Visual implements IVisual {
       }
       for (const depth of depths) {
         layerColorMap.set(depth,
-          this.userLayerColors.get(depth) ?? this.host.colorPalette.getColor(`layer-${depth}`).value
+          this.userLayerColors.get(depth) ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length]
         );
       }
       this.currentLayerDepths = [...depths].sort((a, b) => a - b);
