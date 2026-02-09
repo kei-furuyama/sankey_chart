@@ -216,6 +216,17 @@
           "displayName": "Decimal Places",
           "displayNameKey": "Visual_DecimalPlaces",
           "type": { "numeric": true }
+        },
+        "displayMode": {
+          "displayName": "Display Mode",
+          "displayNameKey": "Visual_DataLabelDisplayMode",
+          "type": {
+            "enumeration": [
+              { "value": "value", "displayName": "Value" },
+              { "value": "percentage", "displayName": "Percentage" },
+              { "value": "both", "displayName": "Value & Percentage" }
+            ]
+          }
         }
       }
     },

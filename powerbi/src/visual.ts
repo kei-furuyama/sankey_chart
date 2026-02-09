@@ -67,8 +67,11 @@ type ComputedLink = SankeyLink<SankeyNodeDatum, SankeyLinkDatum>;
 type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'inputOrder' | 'none';
 type NodeColorMode = 'single' | 'category';
 
+type DataLabelDisplayMode = 'value' | 'percentage' | 'both';
+
 const VALID_LINK_SORT_MODES: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
 const VALID_NODE_COLOR_MODES: NodeColorMode[] = ['single', 'category'];
+const VALID_DATA_LABEL_DISPLAY_MODES: DataLabelDisplayMode[] = ['value', 'percentage', 'both'];
 
 interface VisualSettings {
   nodeWidth: number;
@@ -90,6 +93,7 @@ interface VisualSettings {
   dataLabelFontSize: number;
   dataLabelColor: string;
   dataLabelFontFamily: string;
+  dataLabelDisplayMode: DataLabelDisplayMode;
   displayUnits: number;
   decimalPlaces: number;
   marginTop: number;
@@ -118,6 +122,7 @@ const DEFAULT_SETTINGS: VisualSettings = {
   dataLabelFontSize: 10,
   dataLabelColor: '#666666',
   dataLabelFontFamily: "'Segoe UI', sans-serif",
+  dataLabelDisplayMode: 'value' as DataLabelDisplayMode,
   displayUnits: 0,
   decimalPlaces: 1,
   marginTop: 20,
@@ -307,6 +312,17 @@ class DataLabelSettingsCard extends formattingSettings.SimpleCard {
     value: DEFAULT_SETTINGS.showDataLabels,
   });
 
+  displayMode = new formattingSettings.ItemDropdown({
+    name: 'displayMode',
+    displayName: 'Display Mode',
+    items: [
+      { value: 'value', displayName: 'Value' },
+      { value: 'percentage', displayName: 'Percentage' },
+      { value: 'both', displayName: 'Value & Percentage' },
+    ],
+    value: { value: 'value', displayName: 'Value' },
+  });
+
   fontSize = new formattingSettings.NumUpDown({
     name: 'fontSize',
     displayName: 'Font Size',
@@ -355,7 +371,7 @@ class DataLabelSettingsCard extends formattingSettings.SimpleCard {
   name: string = 'dataLabelSettings';
   displayName: string = 'Node Data Labels';
   topLevelSlice: formattingSettings.ToggleSwitch = this.show;
-  slices: formattingSettings.Slice[] = [this.fontFamily, this.fontSize, this.color, this.displayUnits, this.decimalPlaces];
+  slices: formattingSettings.Slice[] = [this.displayMode, this.fontFamily, this.fontSize, this.color, this.displayUnits, this.decimalPlaces];
 }
 
 class MarginSettingsCard extends formattingSettings.SimpleCard {
@@ -484,6 +500,7 @@ function parseSettings(dataView: DataView): VisualSettings {
     dataLabelFontSize: (dataLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.dataLabelFontSize,
     dataLabelColor: extractFillColor(dataLabelSettings?.color) ?? DEFAULT_SETTINGS.dataLabelColor,
     dataLabelFontFamily: (dataLabelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.dataLabelFontFamily,
+    dataLabelDisplayMode: extractValidatedDropdown(dataLabelSettings?.displayMode, VALID_DATA_LABEL_DISPLAY_MODES, DEFAULT_SETTINGS.dataLabelDisplayMode),
     displayUnits: Number(extractDropdownValue(dataLabelSettings?.displayUnits, String(DEFAULT_SETTINGS.displayUnits))) || 0,
     decimalPlaces: (dataLabelSettings?.decimalPlaces as number) ?? DEFAULT_SETTINGS.decimalPlaces,
     marginTop: (marginSettings?.top as number) ?? DEFAULT_SETTINGS.marginTop,
@@ -986,6 +1003,7 @@ export class Visual implements IVisual {
         this.settings.nodeColorMode = extractValidatedDropdown(nodeSettingsCard.colorMode.value, VALID_NODE_COLOR_MODES, this.settings.nodeColorMode);
         this.settings.displayUnits = Number(extractDropdownValue(dataLabelSettingsCard.displayUnits.value, '0')) || 0;
         this.settings.decimalPlaces = dataLabelSettingsCard.decimalPlaces.value ?? this.settings.decimalPlaces;
+        this.settings.dataLabelDisplayMode = extractValidatedDropdown(dataLabelSettingsCard.displayMode.value, VALID_DATA_LABEL_DISPLAY_MODES, this.settings.dataLabelDisplayMode);
 
         // Extract value format string from the measure column
         const valueCol = dataView.categorical?.values?.find(v => v.source.roles?.['value']);
@@ -1028,6 +1046,18 @@ export class Visual implements IVisual {
       // Signal rendering failed
       this.eventService.renderingFailed(options, String(error));
     }
+  }
+
+  /**
+   * ノードを depth（列）ごとにグループ化し、各列の値合計を返す。
+   */
+  private calculateLayerTotals(nodes: ComputedNode[]): Map<number, number> {
+    const totals = new Map<number, number>();
+    for (const node of nodes) {
+      const depth = node.depth ?? 0;
+      totals.set(depth, (totals.get(depth) ?? 0) + (node.value ?? 0));
+    }
+    return totals;
   }
 
   private renderSankey(data: SankeyData, viewport: IViewport): void {
@@ -1074,13 +1104,14 @@ export class Visual implements IVisual {
 
     // Store nodes for keyboard navigation
     this.currentNodes = graph.nodes;
+    const layerTotals = this.calculateLayerTotals(graph.nodes);
 
     const g = this.svg
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
     this.renderLinks(g, graph.links);
-    this.renderNodes(g, graph.nodes, width);
+    this.renderNodes(g, graph.nodes, width, layerTotals);
   }
 
   private renderLinks(
@@ -1288,7 +1319,8 @@ export class Visual implements IVisual {
   private renderNodes(
     container: Selection<SVGGElement, unknown, null, undefined>,
     nodes: ComputedNode[],
-    chartWidth: number
+    chartWidth: number,
+    layerTotals: Map<number, number>
   ): void {
     const tooltipService = this.tooltipService;
     const selectionManager = this.selectionManager;
@@ -1378,7 +1410,7 @@ export class Visual implements IVisual {
     }
 
     if (this.settings.showDataLabels) {
-      this.renderDataLabels(nodeGroups, chartWidth);
+      this.renderDataLabels(nodeGroups, chartWidth, layerTotals);
     }
   }
 
@@ -1409,9 +1441,10 @@ export class Visual implements IVisual {
 
   private renderDataLabels(
     nodeGroups: Selection<SVGGElement, ComputedNode, SVGGElement, unknown>,
-    chartWidth: number
+    chartWidth: number,
+    layerTotals: Map<number, number>
   ): void {
-    const { dataLabelFontSize, dataLabelColor, dataLabelFontFamily } = this.settings;
+    const { dataLabelFontSize, dataLabelColor, dataLabelFontFamily, dataLabelDisplayMode, decimalPlaces } = this.settings;
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
     const textColor = isHighContrast && hcColors ? hcColors.foreground : dataLabelColor;
@@ -1420,6 +1453,7 @@ export class Visual implements IVisual {
     const showLabels = this.settings.showLabels;
     // If name labels are also shown, offset the data label below
     const dyValue = showLabels ? '1.5em' : '0.35em';
+    const formatter = this.getValueFormatter();
 
     nodeGroups.append('text')
       .attr('x', d => {
@@ -1432,7 +1466,21 @@ export class Visual implements IVisual {
       .attr('font-family', dataLabelFontFamily)
       .attr('font-size', dataLabelFontSize)
       .attr('fill', textColor)
-      .text(d => this.getValueFormatter().format(d.value ?? 0));
+      .text(d => {
+        const value = d.value ?? 0;
+        const layerTotal = layerTotals.get(d.depth ?? 0) ?? 0;
+        const pct = layerTotal > 0 ? (value / layerTotal) * 100 : 0;
+
+        switch (dataLabelDisplayMode) {
+          case 'percentage':
+            return `${pct.toFixed(decimalPlaces)}%`;
+          case 'both':
+            return `${formatter.format(value)} (${pct.toFixed(decimalPlaces)}%)`;
+          case 'value':
+          default:
+            return formatter.format(value);
+        }
+      });
   }
 
   /**
