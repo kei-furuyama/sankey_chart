@@ -101,7 +101,8 @@
               { "value": "source", "displayName": "Source" },
               { "value": "target", "displayName": "Target" },
               { "value": "gradient", "displayName": "Gradient" },
-              { "value": "fixed", "displayName": "Fixed" }
+              { "value": "fixed", "displayName": "Fixed" },
+              { "value": "layer", "displayName": "Layer" }
             ]
           }
         },

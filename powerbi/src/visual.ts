@@ -66,12 +66,12 @@ type ComputedLink = SankeyLink<SankeyNodeDatum, SankeyLinkDatum>;
 
 type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'inputOrder' | 'none';
 type NodeColorMode = 'single' | 'category';
-type LinkColorMode = 'source' | 'target' | 'gradient' | 'fixed';
+type LinkColorMode = 'source' | 'target' | 'gradient' | 'fixed' | 'layer';
 type DataLabelDisplayMode = 'value' | 'percentage' | 'both';
 
 const VALID_LINK_SORT_MODES: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
 const VALID_NODE_COLOR_MODES: NodeColorMode[] = ['single', 'category'];
-const VALID_LINK_COLOR_MODES: LinkColorMode[] = ['source', 'target', 'gradient', 'fixed'];
+const VALID_LINK_COLOR_MODES: LinkColorMode[] = ['source', 'target', 'gradient', 'fixed', 'layer'];
 
 /** Gap in px between a node rect edge and its label text */
 const LABEL_OFFSET = 6;
@@ -208,6 +208,7 @@ class LinkSettingsCard extends formattingSettings.SimpleCard {
       { value: 'target', displayName: 'Target' },
       { value: 'gradient', displayName: 'Gradient' },
       { value: 'fixed', displayName: 'Fixed' },
+      { value: 'layer', displayName: 'Layer' },
     ],
     value: { value: 'source', displayName: 'Source' },
   });
@@ -1168,6 +1169,18 @@ export class Visual implements IVisual {
     const hcColors = this.highContrastColors;
     const isGradient = linkColorMode === 'gradient' && !isHighContrast;
 
+    // Build layer color map if layer mode
+    const layerColorMap = new Map<number, string>();
+    if (linkColorMode === 'layer') {
+      const depths = new Set<number>();
+      for (const l of links) {
+        depths.add(resolveNode(l.source).depth ?? 0);
+      }
+      for (const depth of depths) {
+        layerColorMap.set(depth, this.host.colorPalette.getColor(`layer-${depth}`).value);
+      }
+    }
+
     // Add gradient defs if gradient mode (namespace with instanceId to avoid collision)
     const gradientPrefix = this.instanceId;
     if (isGradient) {
@@ -1200,6 +1213,10 @@ export class Visual implements IVisual {
           return resolveNode(d.target).color ?? '#aaa';
         case 'fixed':
           return linkDefaultColor;
+        case 'layer': {
+          const depth = resolveNode(d.source).depth ?? 0;
+          return layerColorMap.get(depth) ?? '#aaa';
+        }
         case 'source':
         default:
           return resolveNode(d.source).color ?? '#aaa';
