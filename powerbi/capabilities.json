@@ -73,7 +73,8 @@
           "type": {
             "enumeration": [
               { "value": "category", "displayName": "Category Colors" },
-              { "value": "single", "displayName": "Single Color" }
+              { "value": "single", "displayName": "Single Color" },
+              { "value": "layer", "displayName": "By Layer" }
             ]
           }
         },
@@ -102,7 +103,7 @@
               { "value": "target", "displayName": "Target" },
               { "value": "gradient", "displayName": "Gradient" },
               { "value": "fixed", "displayName": "Fixed" },
-              { "value": "layer", "displayName": "Layer" }
+              { "value": "layer", "displayName": "By Layer" }
             ]
           }
         },
@@ -128,19 +129,35 @@
       }
     },
     "layerColors": {
-      "displayName": "Layer Colors",
-      "displayNameKey": "Visual_LayerColors",
+      "displayName": "Link Layer Colors",
+      "displayNameKey": "Visual_LinkLayerColors",
       "properties": {
-        "layer0": { "displayName": "Layer 1", "type": { "fill": { "solid": { "color": true } } } },
-        "layer1": { "displayName": "Layer 2", "type": { "fill": { "solid": { "color": true } } } },
-        "layer2": { "displayName": "Layer 3", "type": { "fill": { "solid": { "color": true } } } },
-        "layer3": { "displayName": "Layer 4", "type": { "fill": { "solid": { "color": true } } } },
-        "layer4": { "displayName": "Layer 5", "type": { "fill": { "solid": { "color": true } } } },
-        "layer5": { "displayName": "Layer 6", "type": { "fill": { "solid": { "color": true } } } },
-        "layer6": { "displayName": "Layer 7", "type": { "fill": { "solid": { "color": true } } } },
-        "layer7": { "displayName": "Layer 8", "type": { "fill": { "solid": { "color": true } } } },
-        "layer8": { "displayName": "Layer 9", "type": { "fill": { "solid": { "color": true } } } },
-        "layer9": { "displayName": "Layer 10", "type": { "fill": { "solid": { "color": true } } } }
+        "layer0": { "displayName": "Layer 1", "displayNameKey": "Visual_Layer1", "type": { "fill": { "solid": { "color": true } } } },
+        "layer1": { "displayName": "Layer 2", "displayNameKey": "Visual_Layer2", "type": { "fill": { "solid": { "color": true } } } },
+        "layer2": { "displayName": "Layer 3", "displayNameKey": "Visual_Layer3", "type": { "fill": { "solid": { "color": true } } } },
+        "layer3": { "displayName": "Layer 4", "displayNameKey": "Visual_Layer4", "type": { "fill": { "solid": { "color": true } } } },
+        "layer4": { "displayName": "Layer 5", "displayNameKey": "Visual_Layer5", "type": { "fill": { "solid": { "color": true } } } },
+        "layer5": { "displayName": "Layer 6", "displayNameKey": "Visual_Layer6", "type": { "fill": { "solid": { "color": true } } } },
+        "layer6": { "displayName": "Layer 7", "displayNameKey": "Visual_Layer7", "type": { "fill": { "solid": { "color": true } } } },
+        "layer7": { "displayName": "Layer 8", "displayNameKey": "Visual_Layer8", "type": { "fill": { "solid": { "color": true } } } },
+        "layer8": { "displayName": "Layer 9", "displayNameKey": "Visual_Layer9", "type": { "fill": { "solid": { "color": true } } } },
+        "layer9": { "displayName": "Layer 10", "displayNameKey": "Visual_Layer10", "type": { "fill": { "solid": { "color": true } } } }
+      }
+    },
+    "nodeLayerColors": {
+      "displayName": "Node Layer Colors",
+      "displayNameKey": "Visual_NodeLayerColors",
+      "properties": {
+        "layer0": { "displayName": "Layer 1", "displayNameKey": "Visual_NodeLayer1", "type": { "fill": { "solid": { "color": true } } } },
+        "layer1": { "displayName": "Layer 2", "displayNameKey": "Visual_NodeLayer2", "type": { "fill": { "solid": { "color": true } } } },
+        "layer2": { "displayName": "Layer 3", "displayNameKey": "Visual_NodeLayer3", "type": { "fill": { "solid": { "color": true } } } },
+        "layer3": { "displayName": "Layer 4", "displayNameKey": "Visual_NodeLayer4", "type": { "fill": { "solid": { "color": true } } } },
+        "layer4": { "displayName": "Layer 5", "displayNameKey": "Visual_NodeLayer5", "type": { "fill": { "solid": { "color": true } } } },
+        "layer5": { "displayName": "Layer 6", "displayNameKey": "Visual_NodeLayer6", "type": { "fill": { "solid": { "color": true } } } },
+        "layer6": { "displayName": "Layer 7", "displayNameKey": "Visual_NodeLayer7", "type": { "fill": { "solid": { "color": true } } } },
+        "layer7": { "displayName": "Layer 8", "displayNameKey": "Visual_NodeLayer8", "type": { "fill": { "solid": { "color": true } } } },
+        "layer8": { "displayName": "Layer 9", "displayNameKey": "Visual_NodeLayer9", "type": { "fill": { "solid": { "color": true } } } },
+        "layer9": { "displayName": "Layer 10", "displayNameKey": "Visual_NodeLayer10", "type": { "fill": { "solid": { "color": true } } } }
       }
     },
     "linkLabelSettings": {

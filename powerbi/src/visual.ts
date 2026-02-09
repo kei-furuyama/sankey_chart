@@ -65,12 +65,12 @@ type ComputedLink = SankeyLink<SankeyNodeDatum, SankeyLinkDatum>;
 // Settings
 
 type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'inputOrder' | 'none';
-type NodeColorMode = 'single' | 'category';
+type NodeColorMode = 'single' | 'category' | 'layer';
 type LinkColorMode = 'source' | 'target' | 'gradient' | 'fixed' | 'layer';
 type DataLabelDisplayMode = 'value' | 'percentage' | 'both';
 
 const VALID_LINK_SORT_MODES: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
-const VALID_NODE_COLOR_MODES: NodeColorMode[] = ['single', 'category'];
+const VALID_NODE_COLOR_MODES: NodeColorMode[] = ['single', 'category', 'layer'];
 const VALID_LINK_COLOR_MODES: LinkColorMode[] = ['source', 'target', 'gradient', 'fixed', 'layer'];
 
 /** Gap in px between a node rect edge and its label text */
@@ -179,6 +179,7 @@ class NodeSettingsCard extends formattingSettings.SimpleCard {
     items: [
       { value: 'category', displayName: 'Category Colors' },
       { value: 'single', displayName: 'Single Color' },
+      { value: 'layer', displayName: 'By Layer' },
     ],
     value: { value: 'category', displayName: 'Category Colors' },
   });
@@ -209,7 +210,7 @@ class LinkSettingsCard extends formattingSettings.SimpleCard {
       { value: 'target', displayName: 'Target' },
       { value: 'gradient', displayName: 'Gradient' },
       { value: 'fixed', displayName: 'Fixed' },
-      { value: 'layer', displayName: 'Layer' },
+      { value: 'layer', displayName: 'By Layer' },
     ],
     value: { value: 'source', displayName: 'Source' },
   });
@@ -657,7 +658,8 @@ function transformDataView(options: TransformDataViewOptions): SankeyData | null
   const nodes: SankeyNodeDatum[] = Array.from(nodeMap.entries()).map(([id, data]) => ({
     id,
     name: id,
-    color: colorMode === 'single'
+    // In layer mode, use defaultColor as placeholder; renderSankey() overrides by depth
+    color: colorMode === 'single' || colorMode === 'layer'
       ? defaultColor
       : userColorMap.get(id) ?? host.colorPalette.getColor(id).value,
     selectionId: data.selectionIds[0], // Use first selectionId for the node
@@ -697,9 +699,13 @@ export class Visual implements IVisual {
   private valueFormat: string = '';
   private cachedFormatter: valueFormatter.IValueFormatter | null = null;
 
-  // Layer color state
+  // Link layer color state
   private userLayerColors = new Map<number, string>();
   private currentLayerDepths: number[] = [];
+
+  // Node layer color state
+  private userNodeLayerColors = new Map<number, string>();
+  private currentNodeLayerDepths: number[] = [];
 
   // Interaction state
   private allowInteractions: boolean = true;
@@ -963,7 +969,7 @@ export class Visual implements IVisual {
     const model = this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
 
     // In category mode, add per-node color pickers
-    if (!isSingle && this.currentNodes.length > 0) {
+    if (this.settings.nodeColorMode === 'category' && this.currentNodes.length > 0) {
       const nodeColorSlices = this.currentNodes.map(node => ({
         uid: `nodeColors_fill_${node.id}`,
         displayName: node.name,
@@ -1020,7 +1026,7 @@ export class Visual implements IVisual {
 
       const layerColorsCard: powerbi.visuals.FormattingCard = {
         uid: 'layerColorsCard',
-        displayName: 'Layer Colors',
+        displayName: 'Link Layer Colors',
         groups: [{
           uid: 'layerColorsGroup',
           displayName: '',
@@ -1029,6 +1035,41 @@ export class Visual implements IVisual {
       };
 
       model.cards.push(layerColorsCard);
+    }
+
+    // In node layer mode, add per-layer node color pickers
+    if (this.settings.nodeColorMode === 'layer' && this.currentNodeLayerDepths.length > 0) {
+      const nodeLayerSlices = this.currentNodeLayerDepths
+        .filter(d => d < MAX_LAYER_COLORS)
+        .map(depth => ({
+          uid: `nodeLayerColors_layer${depth}`,
+          displayName: `Layer ${depth + 1}`,
+          control: {
+            type: powerbi.visuals.FormattingComponent.ColorPicker,
+            properties: {
+              descriptor: {
+                objectName: 'nodeLayerColors',
+                propertyName: `layer${depth}`,
+                selector: null,
+              },
+              value: {
+                value: this.userNodeLayerColors.get(depth) ?? this.host.colorPalette.getColor(`node-layer-${depth}`).value,
+              },
+            },
+          },
+        })) as unknown as powerbi.visuals.FormattingSlice[];
+
+      const nodeLayerColorsCard: powerbi.visuals.FormattingCard = {
+        uid: 'nodeLayerColorsCard',
+        displayName: 'Node Layer Colors',
+        groups: [{
+          uid: 'nodeLayerColorsGroup',
+          displayName: '',
+          slices: nodeLayerSlices,
+        }],
+      };
+
+      model.cards.push(nodeLayerColorsCard);
     }
 
     return model;
@@ -1091,14 +1132,30 @@ export class Visual implements IVisual {
         // Invalidate cached formatter since settings may have changed
         this.cachedFormatter = null;
 
-        // Extract user layer colors from metadata objects
+        // Extract user layer colors from metadata objects (only in layer mode)
         this.userLayerColors.clear();
-        const layerObjs = dataView.metadata?.objects?.layerColors;
-        if (layerObjs) {
-          for (let i = 0; i < MAX_LAYER_COLORS; i++) {
-            const color = extractFillColor(layerObjs[`layer${i}`]);
-            if (color) {
-              this.userLayerColors.set(i, color);
+        if (this.settings.linkColorMode === 'layer') {
+          const layerObjs = dataView.metadata?.objects?.layerColors;
+          if (layerObjs) {
+            for (let i = 0; i < MAX_LAYER_COLORS; i++) {
+              const color = extractFillColor(layerObjs[`layer${i}`]);
+              if (color) {
+                this.userLayerColors.set(i, color);
+              }
+            }
+          }
+        }
+
+        // Extract user node layer colors from metadata objects (only in node layer mode)
+        this.userNodeLayerColors.clear();
+        if (this.settings.nodeColorMode === 'layer') {
+          const nodeLayerObjs = dataView.metadata?.objects?.nodeLayerColors;
+          if (nodeLayerObjs) {
+            for (let i = 0; i < MAX_LAYER_COLORS; i++) {
+              const color = extractFillColor(nodeLayerObjs[`layer${i}`]);
+              if (color) {
+                this.userNodeLayerColors.set(i, color);
+              }
             }
           }
         }
@@ -1119,6 +1176,7 @@ export class Visual implements IVisual {
       if (!data || data.nodes.length === 0) {
         this.currentNodes = [];
         this.currentLayerDepths = [];
+        this.currentNodeLayerDepths = [];
         this.focusedNodeIndex = -1;
         this.showLandingPage(viewport);
         this.target.style.pointerEvents = 'none';
@@ -1199,6 +1257,23 @@ export class Visual implements IVisual {
     if (this.focusedNodeIndex >= graph.nodes.length) {
       this.focusedNodeIndex = graph.nodes.length - 1;
     }
+
+    // Override node colors by depth when node color mode is 'layer'
+    if (this.settings.nodeColorMode === 'layer') {
+      const depths = new Set<number>();
+      for (const node of graph.nodes) {
+        depths.add(node.depth ?? 0);
+      }
+      for (const node of graph.nodes) {
+        const depth = node.depth ?? 0;
+        node.color = this.userNodeLayerColors.get(depth)
+          ?? this.host.colorPalette.getColor(`node-layer-${depth}`).value;
+      }
+      this.currentNodeLayerDepths = [...depths].sort((a, b) => a - b);
+    } else {
+      this.currentNodeLayerDepths = [];
+    }
+
     const layerTotals = this.calculateLayerTotals(graph.nodes);
 
     const g = this.svg
@@ -1695,6 +1770,8 @@ export class Visual implements IVisual {
     this.currentNodes = [];
     this.currentLayerDepths = [];
     this.userLayerColors.clear();
+    this.currentNodeLayerDepths = [];
+    this.userNodeLayerColors.clear();
   }
 }
 
