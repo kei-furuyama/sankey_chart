@@ -66,11 +66,15 @@ type ComputedLink = SankeyLink<SankeyNodeDatum, SankeyLinkDatum>;
 
 type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'inputOrder' | 'none';
 type NodeColorMode = 'single' | 'category';
-
+type LinkColorMode = 'source' | 'target' | 'gradient' | 'fixed';
 type DataLabelDisplayMode = 'value' | 'percentage' | 'both';
 
 const VALID_LINK_SORT_MODES: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
 const VALID_NODE_COLOR_MODES: NodeColorMode[] = ['single', 'category'];
+const VALID_LINK_COLOR_MODES: LinkColorMode[] = ['source', 'target', 'gradient', 'fixed'];
+
+/** Gap in px between a node rect edge and its label text */
+const LABEL_OFFSET = 6;
 const VALID_DATA_LABEL_DISPLAY_MODES: DataLabelDisplayMode[] = ['value', 'percentage', 'both'];
 
 interface VisualSettings {
@@ -80,7 +84,7 @@ interface VisualSettings {
   nodeDefaultColor: string;
   nodeColorMode: NodeColorMode;
   linkOpacity: number;
-  linkColorMode: string;
+  linkColorMode: LinkColorMode;
   linkDefaultColor: string;
   linkSort: LinkSortMode;
   showLinkLabels: boolean;
@@ -487,7 +491,7 @@ function parseSettings(dataView: DataView): VisualSettings {
     nodeDefaultColor: extractFillColor(nodeSettings?.defaultColor) ?? DEFAULT_SETTINGS.nodeDefaultColor,
     nodeColorMode: extractValidatedDropdown(nodeSettings?.colorMode, VALID_NODE_COLOR_MODES, DEFAULT_SETTINGS.nodeColorMode),
     linkOpacity: ((linkSettings?.opacity as number) ?? 50) / 100,
-    linkColorMode: extractDropdownValue(linkSettings?.colorMode, DEFAULT_SETTINGS.linkColorMode),
+    linkColorMode: extractValidatedDropdown(linkSettings?.colorMode, VALID_LINK_COLOR_MODES, DEFAULT_SETTINGS.linkColorMode),
     linkDefaultColor: extractFillColor(linkSettings?.defaultColor) ?? DEFAULT_SETTINGS.linkDefaultColor,
     linkSort: extractValidatedDropdown(linkSettings?.sortMode, VALID_LINK_SORT_MODES, DEFAULT_SETTINGS.linkSort),
     showLinkLabels: (linkLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLinkLabels,
@@ -531,15 +535,14 @@ function getLinkSortFunction(
       // This is achieved by returning undefined, which triggers reorderLinks/reorderNodeLinks
       return undefined;
     case 'descending':
-      // Sort by value descending (large flows first)
-      // Note: y0/y1 are not available at sort time, so we sort by value instead
+    case 'byValueDesc':
+      // Both sort by value descending (large flows first).
+      // 'descending' is the opposite of 'ascending' in the UI;
+      // 'byValueDesc' pairs with 'byValue' for explicit value-based ordering.
       return (a, b) => b.value - a.value;
     case 'byValue':
       // Sort by value ascending (small flows first)
       return (a, b) => a.value - b.value;
-    case 'byValueDesc':
-      // Sort by value descending (large flows first)
-      return (a, b) => b.value - a.value;
     case 'inputOrder':
       // Preserve input order - return null to disable all sorting
       // Combined with nodeSort(null), this keeps the data order from Power BI
@@ -587,7 +590,7 @@ function transformDataView(options: TransformDataViewOptions): SankeyData | null
     const target = String(targetColumn.values[i] ?? '');
     const value = valueColumn ? (valueColumn.values[i] as number) ?? 0 : 1;
 
-    if (!source || !target || value <= 0) {
+    if (!source || !target || source === target || !Number.isFinite(value) || value <= 0) {
       continue;
     }
 
@@ -681,6 +684,7 @@ export class Visual implements IVisual {
 
   // Interaction state
   private allowInteractions: boolean = true;
+  private readonly instanceId: string;
 
   constructor(options?: VisualConstructorOptions) {
     if (!options) {
@@ -695,9 +699,8 @@ export class Visual implements IVisual {
     this.localizationManager = this.host.createLocalizationManager();
     this.formattingSettingsService = new FormattingSettingsService(this.localizationManager);
     this.formattingSettings = new VisualFormattingSettingsModel();
-    this.allowInteractions = 'allowInteractions' in this.host
-      ? (this.host as unknown as { allowInteractions: boolean }).allowInteractions
-      : true;
+    this.allowInteractions = this.readAllowInteractions();
+    this.instanceId = `sankey-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     // Create main container with focus support
     this.target.setAttribute('tabindex', '0');
@@ -705,7 +708,9 @@ export class Visual implements IVisual {
 
     this.svg = select(this.target)
       .append('svg')
-      .classed('sankey-visual', true);
+      .classed('sankey-visual', true)
+      .attr('role', 'img')
+      .attr('aria-label', 'Sankey Chart');
 
     // Setup keyboard navigation
     this.setupKeyboardNavigation();
@@ -727,19 +732,29 @@ export class Visual implements IVisual {
       if (this.currentNodes.length === 0) return;
 
       switch (event.key) {
-        case 'Tab':
-          // Move to next/prev node
+        case 'Tab': {
+          // Move to next/prev node; allow Tab to escape at boundaries
+          const atStart = this.focusedNodeIndex <= 0;
+          const atEnd = this.focusedNodeIndex >= this.currentNodes.length - 1;
+          if (event.shiftKey && atStart) {
+            // At first node + Shift+Tab: let focus leave the visual
+            this.clearNodeFocus();
+            return;
+          }
+          if (!event.shiftKey && atEnd) {
+            // At last node + Tab: let focus leave the visual
+            this.clearNodeFocus();
+            return;
+          }
           if (event.shiftKey) {
-            this.focusedNodeIndex = Math.max(0, this.focusedNodeIndex - 1);
+            this.focusedNodeIndex--;
           } else {
-            this.focusedNodeIndex = Math.min(
-              this.currentNodes.length - 1,
-              this.focusedNodeIndex + 1
-            );
+            this.focusedNodeIndex++;
           }
           this.updateNodeFocus();
           event.preventDefault();
           break;
+        }
 
         case 'ArrowRight':
         case 'ArrowDown':
@@ -846,12 +861,8 @@ export class Visual implements IVisual {
     return this.cachedFormatter;
   }
 
-  private isSelected(id: ISelectionId, selectedIds: ISelectionId[]): boolean {
-    return selectedIds.some(sid => {
-      const key1 = (id as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(id);
-      const key2 = (sid as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(sid);
-      return key1 === key2;
-    });
+  private getSelectionKey(id: ISelectionId): string {
+    return (id as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(id);
   }
 
   /**
@@ -862,14 +873,17 @@ export class Visual implements IVisual {
     const { linkOpacity } = this.settings;
     const isHighContrast = this.isHighContrastMode;
 
+    // Pre-build Set for O(1) lookup instead of O(n) per check
+    const selectedKeySet = new Set(selectedIds.map(id => this.getSelectionKey(id)));
+
+    const isSelected = (id: ISelectionId): boolean => selectedKeySet.has(this.getSelectionKey(id));
+
     // Update node opacity based on selection
     this.svg.selectAll('.nodes g rect')
       .style('opacity', (d: unknown) => {
         if (!hasSelection) return 1;
         const node = d as ComputedNode;
-        return node.selectionId && this.isSelected(node.selectionId, selectedIds)
-          ? 1
-          : 0.3;
+        return node.selectionId && isSelected(node.selectionId) ? 1 : 0.3;
       });
 
     // Update link opacity based on selection
@@ -878,17 +892,13 @@ export class Visual implements IVisual {
         if (!hasSelection) return 1;
         const link = d as ComputedLink;
         const linkSelectionIds = (link as unknown as SankeyLinkDatum).selectionIds ?? [];
-        return linkSelectionIds.some(lid => this.isSelected(lid, selectedIds))
-          ? 1
-          : 0.2;
+        return linkSelectionIds.some(lid => isSelected(lid)) ? 1 : 0.2;
       })
       .attr('stroke-opacity', (d: unknown) => {
         if (!hasSelection) return isHighContrast ? 0.8 : linkOpacity;
         const link = d as ComputedLink;
         const linkSelectionIds = (link as unknown as SankeyLinkDatum).selectionIds ?? [];
-        return linkSelectionIds.some(lid => this.isSelected(lid, selectedIds))
-          ? 0.8
-          : 0.2;
+        return linkSelectionIds.some(lid => isSelected(lid)) ? 0.8 : 0.2;
       });
 
     // Update label opacity
@@ -896,9 +906,7 @@ export class Visual implements IVisual {
       .style('opacity', (d: unknown) => {
         if (!hasSelection) return 1;
         const node = d as ComputedNode;
-        return node.selectionId && this.isSelected(node.selectionId, selectedIds)
-          ? 1
-          : 0.3;
+        return node.selectionId && isSelected(node.selectionId) ? 1 : 0.3;
       });
   }
 
@@ -985,6 +993,9 @@ export class Visual implements IVisual {
       const { viewport, dataViews } = options;
       const dataView = dataViews?.[0];
 
+      // Re-read interaction permission (can change between pinned/live modes)
+      this.allowInteractions = this.readAllowInteractions();
+
       // Update high contrast mode
       this.updateHighContrastMode();
 
@@ -999,7 +1010,7 @@ export class Visual implements IVisual {
         // Override dropdown values from formattingSettings (more reliable than dataView objects)
         const { linkSettingsCard, nodeSettingsCard, dataLabelSettingsCard } = this.formattingSettings;
         this.settings.linkSort = extractValidatedDropdown(linkSettingsCard.sortMode.value, VALID_LINK_SORT_MODES, this.settings.linkSort);
-        this.settings.linkColorMode = extractDropdownValue(linkSettingsCard.colorMode.value, this.settings.linkColorMode);
+        this.settings.linkColorMode = extractValidatedDropdown(linkSettingsCard.colorMode.value, VALID_LINK_COLOR_MODES, this.settings.linkColorMode);
         this.settings.nodeColorMode = extractValidatedDropdown(nodeSettingsCard.colorMode.value, VALID_NODE_COLOR_MODES, this.settings.nodeColorMode);
         this.settings.displayUnits = Number(extractDropdownValue(dataLabelSettingsCard.displayUnits.value, '0')) || 0;
         this.settings.decimalPlaces = dataLabelSettingsCard.decimalPlaces.value ?? this.settings.decimalPlaces;
@@ -1043,13 +1054,13 @@ export class Visual implements IVisual {
       // Signal rendering finished
       this.eventService.renderingFinished(options);
     } catch (error) {
-      // Signal rendering failed
+      console.error('Sankey visual render error:', error);
       this.eventService.renderingFailed(options, String(error));
     }
   }
 
   /**
-   * ノードを depth（列）ごとにグループ化し、各列の値合計を返す。
+   * Group nodes by depth (column) and return the total value per column.
    */
   private calculateLayerTotals(nodes: ComputedNode[]): Map<number, number> {
     const totals = new Map<number, number>();
@@ -1102,8 +1113,11 @@ export class Visual implements IVisual {
       links: data.links.map(d => ({ ...d })),
     });
 
-    // Store nodes for keyboard navigation
+    // Store nodes for keyboard navigation; clamp stale focus index
     this.currentNodes = graph.nodes;
+    if (this.focusedNodeIndex >= graph.nodes.length) {
+      this.focusedNodeIndex = graph.nodes.length - 1;
+    }
     const layerTotals = this.calculateLayerTotals(graph.nodes);
 
     const g = this.svg
@@ -1127,12 +1141,13 @@ export class Visual implements IVisual {
     const hcColors = this.highContrastColors;
     const isGradient = linkColorMode === 'gradient' && !isHighContrast;
 
-    // Add gradient defs if gradient mode
+    // Add gradient defs if gradient mode (namespace with instanceId to avoid collision)
+    const gradientPrefix = this.instanceId;
     if (isGradient) {
       const defs = container.append('defs');
       links.forEach((link, i) => {
         const gradient = defs.append('linearGradient')
-          .attr('id', `gradient-${i}`)
+          .attr('id', `${gradientPrefix}-${i}`)
           .attr('gradientUnits', 'userSpaceOnUse')
           .attr('x1', resolveNode(link.source).x1 ?? 0)
           .attr('y1', 0)
@@ -1153,7 +1168,7 @@ export class Visual implements IVisual {
       }
       switch (linkColorMode) {
         case 'gradient':
-          return `url(#gradient-${i})`;
+          return `url(#${gradientPrefix}-${i})`;
         case 'target':
           return resolveNode(d.target).color ?? '#aaa';
         case 'fixed':
@@ -1266,54 +1281,48 @@ export class Visual implements IVisual {
       .append('g')
       .style('pointer-events', 'none');
 
-    // Calculate center position for each link
-    const getLinkCenter = (d: ComputedLink): { x: number; y: number } => {
-      const source = resolveNode(d.source);
-      const target = resolveNode(d.target);
-      const sourceX = source.x1 ?? 0;
-      const targetX = target.x0 ?? 0;
-      const sourceY = d.y0 ?? 0;
-      const targetY = d.y1 ?? 0;
-      return {
-        x: (sourceX + targetX) / 2,
-        y: (sourceY + targetY) / 2,
-      };
-    };
+    // Pre-compute label positions and formatted text to avoid redundant calls
+    const charWidthRatio = 0.6;
+    const lineHeight = 1.4;
+    const bgRadius = 3;
+    const bgOpacity = 0.9;
+
+    const labelDataMap = new Map<ComputedLink, { cx: number; cy: number; text: string; width: number; height: number }>();
+    for (const link of labelsToRender) {
+      const source = resolveNode(link.source);
+      const target = resolveNode(link.target);
+      const cx = ((source.x1 ?? 0) + (target.x0 ?? 0)) / 2;
+      const cy = ((link.y0 ?? 0) + (link.y1 ?? 0)) / 2;
+      const text = formatter.format(link.value ?? 0);
+      const width = text.length * linkLabelFontSize * charWidthRatio + labelPadding * 2;
+      const height = linkLabelFontSize * lineHeight;
+      labelDataMap.set(link, { cx, cy, text, width, height });
+    }
+
+    const getLabelData = (d: ComputedLink) => labelDataMap.get(d)!;
 
     // Add background rectangles for readability
     labelGroups.append('rect')
-      .attr('x', d => {
-        const center = getLinkCenter(d);
-        const text = formatter.format(d.value ?? 0);
-        const width = text.length * linkLabelFontSize * 0.6 + labelPadding * 2;
-        return center.x - width / 2;
-      })
-      .attr('y', d => {
-        const center = getLinkCenter(d);
-        const height = linkLabelFontSize * 1.4;
-        return center.y - height / 2;
-      })
-      .attr('width', d => {
-        const text = formatter.format(d.value ?? 0);
-        return text.length * linkLabelFontSize * 0.6 + labelPadding * 2;
-      })
-      .attr('height', linkLabelFontSize * 1.4)
-      .attr('rx', 3)
-      .attr('ry', 3)
+      .attr('x', d => getLabelData(d).cx - getLabelData(d).width / 2)
+      .attr('y', d => getLabelData(d).cy - getLabelData(d).height / 2)
+      .attr('width', d => getLabelData(d).width)
+      .attr('height', d => getLabelData(d).height)
+      .attr('rx', bgRadius)
+      .attr('ry', bgRadius)
       .attr('fill', bgColor)
-      .attr('opacity', 0.9);
+      .attr('opacity', bgOpacity);
 
     // Add text labels
     labelGroups.append('text')
-      .attr('x', d => getLinkCenter(d).x)
-      .attr('y', d => getLinkCenter(d).y)
+      .attr('x', d => getLabelData(d).cx)
+      .attr('y', d => getLabelData(d).cy)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
-      .attr('font-family', 'Segoe UI, sans-serif')
+      .attr('font-family', this.settings.labelFontFamily)
       .attr('font-size', linkLabelFontSize)
       .attr('font-weight', '500')
       .attr('fill', textColor)
-      .text(d => formatter.format(d.value ?? 0));
+      .text(d => getLabelData(d).text);
   }
 
   private renderNodes(
@@ -1399,9 +1408,13 @@ export class Visual implements IVisual {
         });
       })
       .on('mouseout', (event: MouseEvent) => {
-        const strokeColor = isHighContrast && hcColors ? hcColors.foreground : 'none';
-        const strokeWidth = isHighContrast ? 1 : 0;
-        select(event.currentTarget as SVGRectElement).attr('stroke', strokeColor).attr('stroke-width', strokeWidth);
+        const el = select(event.currentTarget as SVGRectElement);
+        // Preserve keyboard focus ring when mouse leaves
+        if (!el.classed('focused')) {
+          const strokeColor = isHighContrast && hcColors ? hcColors.foreground : 'none';
+          const strokeWidth = isHighContrast ? 1 : 0;
+          el.attr('stroke', strokeColor).attr('stroke-width', strokeWidth);
+        }
         tooltipService.hide({ immediately: true, isTouchEvent: false });
       });
 
@@ -1423,7 +1436,7 @@ export class Visual implements IVisual {
     const hcColors = this.highContrastColors;
     const textColor = isHighContrast && hcColors ? hcColors.foreground : labelColor;
     const midPoint = chartWidth / 2;
-    const labelOffset = 6;
+    const labelOffset = LABEL_OFFSET;
 
     nodeGroups.append('text')
       .attr('x', d => {
@@ -1449,7 +1462,7 @@ export class Visual implements IVisual {
     const hcColors = this.highContrastColors;
     const textColor = isHighContrast && hcColors ? hcColors.foreground : dataLabelColor;
     const midPoint = chartWidth / 2;
-    const labelOffset = 6;
+    const labelOffset = LABEL_OFFSET;
     const showLabels = this.settings.showLabels;
     // If name labels are also shown, offset the data label below
     const dyValue = showLabels ? '1.5em' : '0.35em';
@@ -1490,7 +1503,7 @@ export class Visual implements IVisual {
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
     const textColor = isHighContrast && hcColors ? hcColors.foreground : '#333';
-    const subtextColor = isHighContrast && hcColors ? hcColors.foreground : '#666';
+    const subtextColor = isHighContrast && hcColors ? hcColors.foreground : '#555';
     const iconColor = isHighContrast && hcColors ? hcColors.foreground : '#0078d4';
 
     const centerX = viewport.width / 2;
@@ -1536,7 +1549,7 @@ export class Visual implements IVisual {
     landingGroup.append('text')
       .attr('y', 10)
       .attr('text-anchor', 'middle')
-      .attr('font-family', 'Segoe UI, sans-serif')
+      .attr('font-family', this.settings.labelFontFamily)
       .attr('font-size', '16px')
       .attr('font-weight', '600')
       .attr('fill', textColor)
@@ -1546,9 +1559,9 @@ export class Visual implements IVisual {
     const instructions = [
       'To get started, add data fields:',
       '',
-      'Source \u2013 Origin node name',
-      'Target \u2013 Destination node name',
-      'Value \u2013 Flow quantity (optional)',
+      'Source – Origin node name',
+      'Target – Destination node name',
+      'Value – Flow quantity (optional)',
     ];
 
     const instructionGroup = landingGroup.append('g')
@@ -1558,12 +1571,26 @@ export class Visual implements IVisual {
       instructionGroup.append('text')
         .attr('y', i * 18)
         .attr('text-anchor', 'middle')
-        .attr('font-family', 'Segoe UI, sans-serif')
+        .attr('font-family', this.settings.labelFontFamily)
         .attr('font-size', i === 0 ? '13px' : '12px')
         .attr('font-weight', i === 0 ? '500' : '400')
         .attr('fill', i === 0 ? textColor : subtextColor)
         .text(text);
     });
+  }
+
+  private readAllowInteractions(): boolean {
+    return 'allowInteractions' in this.host
+      ? (this.host as unknown as { allowInteractions: boolean }).allowInteractions
+      : true;
+  }
+
+  public destroy(): void {
+    // Power BI calls this when the visual is removed.
+    // DOM event listeners on this.target are cleaned up by Power BI when
+    // the element is removed from the DOM, but we clear references to help GC.
+    this.svg.selectAll('*').remove();
+    this.currentNodes = [];
   }
 }
 

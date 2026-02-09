@@ -80,14 +80,7 @@
         "defaultColor": {
           "displayName": "Default Color",
           "displayNameKey": "Visual_DefaultColor",
-          "type": { "fill": { "solid": { "color": true } } },
-          "rule": {
-            "inputRole": "value",
-            "output": {
-              "property": "fill",
-              "selector": ["source"]
-            }
-          }
+          "type": { "fill": { "solid": { "color": true } } }
         }
       }
     },
@@ -278,7 +271,6 @@
       "default": true,
       "canvas": true
     },
-    "roles": ["tooltips"],
     "supportEnhancedTooltips": true
   },
   "sorting": {
