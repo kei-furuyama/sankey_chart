@@ -1267,10 +1267,8 @@ export class Visual implements IVisual {
     if (this.settings.nodeColorMode === 'layer') {
       const depths = new Set<number>();
       for (const node of graph.nodes) {
-        depths.add(node.depth ?? 0);
-      }
-      for (const node of graph.nodes) {
         const depth = node.depth ?? 0;
+        depths.add(depth);
         node.color = this.userNodeLayerColors.get(depth)
           ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length];
       }
