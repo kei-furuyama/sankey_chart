@@ -1339,28 +1339,24 @@ export class Visual implements IVisual {
       this.focusedNodeIndex = graph.nodes.length - 1;
     }
 
-    // Override node colors by depth when node color mode is 'layer'
-    if (this.settings.nodeColorMode === 'layer') {
+    // Collect unique depths once, shared by node layer colors and label layer colors
+    const needNodeLayer = this.settings.nodeColorMode === 'layer';
+    const needLabelLayer = this.settings.labelColorMode === 'layer';
+    if (needNodeLayer || needLabelLayer) {
       const depths = new Set<number>();
       for (const node of graph.nodes) {
         const depth = node.depth ?? 0;
         depths.add(depth);
-        node.color = this.userNodeLayerColors.get(depth)
-          ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length];
+        if (needNodeLayer) {
+          node.color = this.userNodeLayerColors.get(depth)
+            ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length];
+        }
       }
-      this.currentNodeLayerDepths = [...depths].sort((a, b) => a - b);
+      const sorted = [...depths].sort((a, b) => a - b);
+      this.currentNodeLayerDepths = needNodeLayer ? sorted : [];
+      this.currentLabelLayerDepths = needLabelLayer ? sorted : [];
     } else {
       this.currentNodeLayerDepths = [];
-    }
-
-    // Track unique depths for label layer color pickers
-    if (this.settings.labelColorMode === 'layer') {
-      const depths = new Set<number>();
-      for (const node of graph.nodes) {
-        depths.add(node.depth ?? 0);
-      }
-      this.currentLabelLayerDepths = [...depths].sort((a, b) => a - b);
-    } else {
       this.currentLabelLayerDepths = [];
     }
 
