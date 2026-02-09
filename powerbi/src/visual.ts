@@ -122,7 +122,7 @@ const DEFAULT_SETTINGS: VisualSettings = {
   dataLabelFontSize: 10,
   dataLabelColor: '#666666',
   dataLabelFontFamily: "'Segoe UI', sans-serif",
-  dataLabelDisplayMode: 'value' as DataLabelDisplayMode,
+  dataLabelDisplayMode: 'value',
   displayUnits: 0,
   decimalPlaces: 1,
   marginTop: 20,
