@@ -75,6 +75,7 @@ const VALID_LINK_COLOR_MODES: LinkColorMode[] = ['source', 'target', 'gradient',
 
 /** Gap in px between a node rect edge and its label text */
 const LABEL_OFFSET = 6;
+const MAX_LAYER_COLORS = 10;
 const VALID_DATA_LABEL_DISPLAY_MODES: DataLabelDisplayMode[] = ['value', 'percentage', 'both'];
 
 interface VisualSettings {
@@ -696,6 +697,10 @@ export class Visual implements IVisual {
   private valueFormat: string = '';
   private cachedFormatter: valueFormatter.IValueFormatter | null = null;
 
+  // Layer color state
+  private userLayerColors = new Map<number, string>();
+  private currentLayerDepths: number[] = [];
+
   // Interaction state
   private allowInteractions: boolean = true;
   private readonly instanceId: string;
@@ -991,6 +996,41 @@ export class Visual implements IVisual {
       model.cards.push(nodeColorsCard);
     }
 
+    // In layer mode, add per-layer color pickers
+    if (this.settings.linkColorMode === 'layer' && this.currentLayerDepths.length > 0) {
+      const layerSlices = this.currentLayerDepths
+        .filter(d => d < MAX_LAYER_COLORS)
+        .map(depth => ({
+          uid: `layerColors_layer${depth}`,
+          displayName: `Layer ${depth + 1}`,
+          control: {
+            type: powerbi.visuals.FormattingComponent.ColorPicker,
+            properties: {
+              descriptor: {
+                objectName: 'layerColors',
+                propertyName: `layer${depth}`,
+                selector: null,
+              },
+              value: {
+                value: this.userLayerColors.get(depth) ?? this.host.colorPalette.getColor(`layer-${depth}`).value,
+              },
+            },
+          },
+        })) as unknown as powerbi.visuals.FormattingSlice[];
+
+      const layerColorsCard: powerbi.visuals.FormattingCard = {
+        uid: 'layerColorsCard',
+        displayName: 'Layer Colors',
+        groups: [{
+          uid: 'layerColorsGroup',
+          displayName: '',
+          slices: layerSlices,
+        }],
+      };
+
+      model.cards.push(layerColorsCard);
+    }
+
     return model;
   }
 
@@ -1050,6 +1090,18 @@ export class Visual implements IVisual {
 
         // Invalidate cached formatter since settings may have changed
         this.cachedFormatter = null;
+
+        // Extract user layer colors from metadata objects
+        this.userLayerColors.clear();
+        const layerObjs = dataView.metadata?.objects?.layerColors;
+        if (layerObjs) {
+          for (let i = 0; i < MAX_LAYER_COLORS; i++) {
+            const color = extractFillColor(layerObjs[`layer${i}`]);
+            if (color) {
+              this.userLayerColors.set(i, color);
+            }
+          }
+        }
       }
 
       this.svg
@@ -1066,6 +1118,7 @@ export class Visual implements IVisual {
       });
       if (!data || data.nodes.length === 0) {
         this.currentNodes = [];
+        this.currentLayerDepths = [];
         this.focusedNodeIndex = -1;
         this.showLandingPage(viewport);
         this.target.style.pointerEvents = 'none';
@@ -1177,8 +1230,13 @@ export class Visual implements IVisual {
         depths.add(resolveNode(l.source).depth ?? 0);
       }
       for (const depth of depths) {
-        layerColorMap.set(depth, this.host.colorPalette.getColor(`layer-${depth}`).value);
+        layerColorMap.set(depth,
+          this.userLayerColors.get(depth) ?? this.host.colorPalette.getColor(`layer-${depth}`).value
+        );
       }
+      this.currentLayerDepths = [...depths].sort((a, b) => a - b);
+    } else {
+      this.currentLayerDepths = [];
     }
 
     // Add gradient defs if gradient mode (namespace with instanceId to avoid collision)
@@ -1635,6 +1693,8 @@ export class Visual implements IVisual {
     // the element is removed from the DOM, but we clear references to help GC.
     this.svg.selectAll('*').remove();
     this.currentNodes = [];
+    this.currentLayerDepths = [];
+    this.userLayerColors.clear();
   }
 }
 

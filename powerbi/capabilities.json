@@ -127,6 +127,22 @@
         }
       }
     },
+    "layerColors": {
+      "displayName": "Layer Colors",
+      "displayNameKey": "Visual_LayerColors",
+      "properties": {
+        "layer0": { "displayName": "Layer 1", "type": { "fill": { "solid": { "color": true } } } },
+        "layer1": { "displayName": "Layer 2", "type": { "fill": { "solid": { "color": true } } } },
+        "layer2": { "displayName": "Layer 3", "type": { "fill": { "solid": { "color": true } } } },
+        "layer3": { "displayName": "Layer 4", "type": { "fill": { "solid": { "color": true } } } },
+        "layer4": { "displayName": "Layer 5", "type": { "fill": { "solid": { "color": true } } } },
+        "layer5": { "displayName": "Layer 6", "type": { "fill": { "solid": { "color": true } } } },
+        "layer6": { "displayName": "Layer 7", "type": { "fill": { "solid": { "color": true } } } },
+        "layer7": { "displayName": "Layer 8", "type": { "fill": { "solid": { "color": true } } } },
+        "layer8": { "displayName": "Layer 9", "type": { "fill": { "solid": { "color": true } } } },
+        "layer9": { "displayName": "Layer 10", "type": { "fill": { "solid": { "color": true } } } }
+      }
+    },
     "linkLabelSettings": {
       "displayName": "Link Labels",
       "displayNameKey": "Visual_LinkLabels",
