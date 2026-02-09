@@ -206,8 +206,13 @@
           }
         },
         "decimalPlaces": {
-          "displayName": "Decimal Places",
+          "displayName": "Value Decimal Places",
           "displayNameKey": "Visual_DecimalPlaces",
+          "type": { "numeric": true }
+        },
+        "percentDecimalPlaces": {
+          "displayName": "Percentage Decimal Places",
+          "displayNameKey": "Visual_PercentDecimalPlaces",
           "type": { "numeric": true }
         },
         "displayMode": {

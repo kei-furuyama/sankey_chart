@@ -100,6 +100,7 @@ interface VisualSettings {
   dataLabelDisplayMode: DataLabelDisplayMode;
   displayUnits: number;
   decimalPlaces: number;
+  percentDecimalPlaces: number;
   marginTop: number;
   marginRight: number;
   marginBottom: number;
@@ -129,6 +130,7 @@ const DEFAULT_SETTINGS: VisualSettings = {
   dataLabelDisplayMode: 'value',
   displayUnits: 0,
   decimalPlaces: 1,
+  percentDecimalPlaces: 1,
   marginTop: 20,
   marginRight: 120,
   marginBottom: 20,
@@ -364,8 +366,18 @@ class DataLabelSettingsCard extends formattingSettings.SimpleCard {
 
   decimalPlaces = new formattingSettings.NumUpDown({
     name: 'decimalPlaces',
-    displayName: 'Decimal Places',
+    displayName: 'Value Decimal Places',
     value: DEFAULT_SETTINGS.decimalPlaces,
+    options: {
+      minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min },
+      maxValue: { value: 10, type: powerbi.visuals.ValidatorType.Max },
+    },
+  });
+
+  percentDecimalPlaces = new formattingSettings.NumUpDown({
+    name: 'percentDecimalPlaces',
+    displayName: 'Percentage Decimal Places',
+    value: DEFAULT_SETTINGS.percentDecimalPlaces,
     options: {
       minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min },
       maxValue: { value: 10, type: powerbi.visuals.ValidatorType.Max },
@@ -375,7 +387,7 @@ class DataLabelSettingsCard extends formattingSettings.SimpleCard {
   name: string = 'dataLabelSettings';
   displayName: string = 'Node Data Labels';
   topLevelSlice: formattingSettings.ToggleSwitch = this.show;
-  slices: formattingSettings.Slice[] = [this.displayMode, this.fontFamily, this.fontSize, this.color, this.displayUnits, this.decimalPlaces];
+  slices: formattingSettings.Slice[] = [this.displayMode, this.fontFamily, this.fontSize, this.color, this.displayUnits, this.decimalPlaces, this.percentDecimalPlaces];
 }
 
 class MarginSettingsCard extends formattingSettings.SimpleCard {
@@ -507,6 +519,7 @@ function parseSettings(dataView: DataView): VisualSettings {
     dataLabelDisplayMode: extractValidatedDropdown(dataLabelSettings?.displayMode, VALID_DATA_LABEL_DISPLAY_MODES, DEFAULT_SETTINGS.dataLabelDisplayMode),
     displayUnits: Number(extractDropdownValue(dataLabelSettings?.displayUnits, String(DEFAULT_SETTINGS.displayUnits))) || 0,
     decimalPlaces: (dataLabelSettings?.decimalPlaces as number) ?? DEFAULT_SETTINGS.decimalPlaces,
+    percentDecimalPlaces: (dataLabelSettings?.percentDecimalPlaces as number) ?? DEFAULT_SETTINGS.percentDecimalPlaces,
     marginTop: (marginSettings?.top as number) ?? DEFAULT_SETTINGS.marginTop,
     marginRight: (marginSettings?.right as number) ?? DEFAULT_SETTINGS.marginRight,
     marginBottom: (marginSettings?.bottom as number) ?? DEFAULT_SETTINGS.marginBottom,
@@ -921,6 +934,19 @@ export class Visual implements IVisual {
       ? [card.width, card.padding, card.iterations, card.colorMode, card.defaultColor]
       : [card.width, card.padding, card.iterations, card.colorMode];
 
+    // Show/hide decimal places slices based on display mode
+    const displayMode = this.settings.dataLabelDisplayMode;
+    const dlCard = this.formattingSettings.dataLabelSettingsCard;
+    const baseSlices: formattingSettings.Slice[] = [dlCard.displayMode, dlCard.fontFamily, dlCard.fontSize, dlCard.color];
+    if (displayMode === 'value') {
+      dlCard.slices = [...baseSlices, dlCard.displayUnits, dlCard.decimalPlaces];
+    } else if (displayMode === 'percentage') {
+      dlCard.slices = [...baseSlices, dlCard.percentDecimalPlaces];
+    } else {
+      // 'both'
+      dlCard.slices = [...baseSlices, dlCard.displayUnits, dlCard.decimalPlaces, dlCard.percentDecimalPlaces];
+    }
+
     // Show link defaultColor only in fixed mode
     const isFixed = this.settings.linkColorMode === 'fixed';
     const linkCard = this.formattingSettings.linkSettingsCard;
@@ -1014,6 +1040,7 @@ export class Visual implements IVisual {
         this.settings.nodeColorMode = extractValidatedDropdown(nodeSettingsCard.colorMode.value, VALID_NODE_COLOR_MODES, this.settings.nodeColorMode);
         this.settings.displayUnits = Number(extractDropdownValue(dataLabelSettingsCard.displayUnits.value, '0')) || 0;
         this.settings.decimalPlaces = dataLabelSettingsCard.decimalPlaces.value ?? this.settings.decimalPlaces;
+        this.settings.percentDecimalPlaces = dataLabelSettingsCard.percentDecimalPlaces.value ?? this.settings.percentDecimalPlaces;
         this.settings.dataLabelDisplayMode = extractValidatedDropdown(dataLabelSettingsCard.displayMode.value, VALID_DATA_LABEL_DISPLAY_MODES, this.settings.dataLabelDisplayMode);
 
         // Extract value format string from the measure column
@@ -1457,7 +1484,7 @@ export class Visual implements IVisual {
     chartWidth: number,
     layerTotals: Map<number, number>
   ): void {
-    const { dataLabelFontSize, dataLabelColor, dataLabelFontFamily, dataLabelDisplayMode, decimalPlaces } = this.settings;
+    const { dataLabelFontSize, dataLabelColor, dataLabelFontFamily, dataLabelDisplayMode, percentDecimalPlaces } = this.settings;
     const isHighContrast = this.isHighContrastMode;
     const hcColors = this.highContrastColors;
     const textColor = isHighContrast && hcColors ? hcColors.foreground : dataLabelColor;
@@ -1486,9 +1513,9 @@ export class Visual implements IVisual {
 
         switch (dataLabelDisplayMode) {
           case 'percentage':
-            return `${pct.toFixed(decimalPlaces)}%`;
+            return `${pct.toFixed(percentDecimalPlaces)}%`;
           case 'both':
-            return `${formatter.format(value)} (${pct.toFixed(decimalPlaces)}%)`;
+            return `${formatter.format(value)} (${pct.toFixed(percentDecimalPlaces)}%)`;
           case 'value':
           default:
             return formatter.format(value);
