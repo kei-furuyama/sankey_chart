@@ -40,7 +40,6 @@ powerbi/
 ├── style/
 │   └── visual.less        # Styles
 ├── assets/                # Visual icon
-├── sample-data/           # Sample Power BI data
 └── dist/                  # Built .pbiviz package
 ```
 
