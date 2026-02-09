@@ -1024,7 +1024,6 @@ export class Visual implements IVisual {
             value: { value: node.color ?? this.host.colorPalette.getColor(node.id).value },
           },
         },
-      // Cast required: Power BI FormattingSlice type doesn't expose the control shape we build dynamically
       })) as unknown as powerbi.visuals.FormattingSlice[];
 
       const nodesCard = findCard('nodeSettings_card', 'Nodes');
@@ -1037,100 +1036,44 @@ export class Visual implements IVisual {
       }
     }
 
-    // In link layer mode, add per-layer color pickers into Links card
+    // Helper to build per-layer color picker slices and append as a group to a parent card
+    // Cast required: Power BI FormattingSlice type doesn't expose the control shape we build dynamically
+    const addLayerColorGroup = (
+      depths: number[],
+      colorMap: Map<number, string>,
+      objectName: string,
+      groupUid: string,
+      cardUid: string,
+      cardDisplayName: string,
+    ) => {
+      const slices = depths
+        .filter(d => d < MAX_LAYER_COLORS)
+        .map(depth => ({
+          uid: `${objectName}_layer${depth}`,
+          displayName: `Layer ${depth + 1}`,
+          control: {
+            type: powerbi.visuals.FormattingComponent.ColorPicker,
+            properties: {
+              descriptor: { objectName, propertyName: `layer${depth}`, selector: null },
+              value: { value: colorMap.get(depth) ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length] },
+            },
+          },
+        })) as unknown as powerbi.visuals.FormattingSlice[];
+
+      const card = findCard(cardUid, cardDisplayName);
+      if (card) {
+        card.groups.push({ uid: groupUid, displayName: 'Layer Colors', slices });
+      }
+    };
+
     if (this.settings.linkColorMode === 'layer' && this.currentLayerDepths.length > 0) {
-      const layerSlices = this.currentLayerDepths
-        .filter(d => d < MAX_LAYER_COLORS)
-        .map(depth => ({
-          uid: `layerColors_layer${depth}`,
-          displayName: `Layer ${depth + 1}`,
-          control: {
-            type: powerbi.visuals.FormattingComponent.ColorPicker,
-            properties: {
-              descriptor: {
-                objectName: 'layerColors',
-                propertyName: `layer${depth}`,
-                selector: null,
-              },
-              value: {
-                value: this.userLayerColors.get(depth) ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length],
-              },
-            },
-          },
-        })) as unknown as powerbi.visuals.FormattingSlice[];
-
-      const linksCard = findCard('linkSettings_card', 'Links');
-      if (linksCard) {
-        linksCard.groups.push({
-          uid: 'layerColorsGroup',
-          displayName: 'Layer Colors',
-          slices: layerSlices,
-        });
-      }
+      addLayerColorGroup(this.currentLayerDepths, this.userLayerColors, 'layerColors', 'layerColorsGroup', 'linkSettings_card', 'Links');
     }
-
-    // In node layer mode, add per-layer node color pickers into Nodes card
     if (this.settings.nodeColorMode === 'layer' && this.currentNodeLayerDepths.length > 0) {
-      const nodeLayerSlices = this.currentNodeLayerDepths
-        .filter(d => d < MAX_LAYER_COLORS)
-        .map(depth => ({
-          uid: `nodeLayerColors_layer${depth}`,
-          displayName: `Layer ${depth + 1}`,
-          control: {
-            type: powerbi.visuals.FormattingComponent.ColorPicker,
-            properties: {
-              descriptor: {
-                objectName: 'nodeLayerColors',
-                propertyName: `layer${depth}`,
-                selector: null,
-              },
-              value: {
-                value: this.userNodeLayerColors.get(depth) ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length],
-              },
-            },
-          },
-        })) as unknown as powerbi.visuals.FormattingSlice[];
-
-      const nodesCard = findCard('nodeSettings_card', 'Nodes');
-      if (nodesCard) {
-        nodesCard.groups.push({
-          uid: 'nodeLayerColorsGroup',
-          displayName: 'Layer Colors',
-          slices: nodeLayerSlices,
-        });
-      }
+      addLayerColorGroup(this.currentNodeLayerDepths, this.userNodeLayerColors, 'nodeLayerColors', 'nodeLayerColorsGroup', 'nodeSettings_card', 'Nodes');
     }
-
-    // In label layer mode, add per-layer label color pickers into Node Labels card
     if (this.settings.labelColorMode === 'layer' && this.currentLabelLayerDepths.length > 0) {
-      const labelLayerSlices = this.currentLabelLayerDepths
-        .filter(d => d < MAX_LAYER_COLORS)
-        .map(depth => ({
-          uid: `labelLayerColors_layer${depth}`,
-          displayName: `Layer ${depth + 1}`,
-          control: {
-            type: powerbi.visuals.FormattingComponent.ColorPicker,
-            properties: {
-              descriptor: {
-                objectName: 'labelLayerColors',
-                propertyName: `layer${depth}`,
-                selector: null,
-              },
-              value: {
-                value: this.userLabelLayerColors.get(depth) ?? DEFAULT_LAYER_PALETTE[depth % DEFAULT_LAYER_PALETTE.length],
-              },
-            },
-          },
-        })) as unknown as powerbi.visuals.FormattingSlice[];
-
-      const labelsCard = findCard('labelSettings_card', 'Node Labels');
-      if (labelsCard) {
-        labelsCard.groups.push({
-          uid: 'labelLayerColorsGroup',
-          displayName: 'Layer Colors',
-          slices: labelLayerSlices,
-        });
-      }
+      addLayerColorGroup(this.currentLabelLayerDepths, this.userLabelLayerColors, 'labelLayerColors', 'labelLayerColorsGroup', 'labelSettings_card', 'Node Labels');
     }
 
     return model;
