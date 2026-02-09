@@ -998,7 +998,15 @@ export class Visual implements IVisual {
 
     const model = this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
 
-    // In category mode, add per-node color pickers
+    // Helper to find a card by uid (with displayName fallback)
+    const formattingCards = model.cards.filter(
+      (c): c is powerbi.visuals.FormattingCard => 'groups' in c,
+    );
+    const findCard = (uid: string, displayName: string) =>
+      formattingCards.find(c => c.uid === uid)
+      ?? formattingCards.find(c => c.displayName === displayName);
+
+    // In category mode, add per-node color pickers into Nodes card
     if (this.settings.nodeColorMode === 'category' && this.currentNodes.length > 0) {
       const nodeColorSlices = this.currentNodes.map(node => ({
         uid: `nodeColors_fill_${node.id}`,
@@ -1019,20 +1027,17 @@ export class Visual implements IVisual {
       // Cast required: Power BI FormattingSlice type doesn't expose the control shape we build dynamically
       })) as unknown as powerbi.visuals.FormattingSlice[];
 
-      const nodeColorsCard: powerbi.visuals.FormattingCard = {
-        uid: 'nodeColorsCard',
-        displayName: 'Node Colors',
-        groups: [{
+      const nodesCard = findCard('nodeSettings_card', 'Nodes');
+      if (nodesCard) {
+        nodesCard.groups.push({
           uid: 'nodeColorsGroup',
-          displayName: '',
+          displayName: 'Node Colors',
           slices: nodeColorSlices,
-        }],
-      };
-
-      model.cards.push(nodeColorsCard);
+        });
+      }
     }
 
-    // In layer mode, add per-layer color pickers
+    // In link layer mode, add per-layer color pickers into Links card
     if (this.settings.linkColorMode === 'layer' && this.currentLayerDepths.length > 0) {
       const layerSlices = this.currentLayerDepths
         .filter(d => d < MAX_LAYER_COLORS)
@@ -1054,20 +1059,17 @@ export class Visual implements IVisual {
           },
         })) as unknown as powerbi.visuals.FormattingSlice[];
 
-      const layerColorsCard: powerbi.visuals.FormattingCard = {
-        uid: 'layerColorsCard',
-        displayName: 'Link Layer Colors',
-        groups: [{
+      const linksCard = findCard('linkSettings_card', 'Links');
+      if (linksCard) {
+        linksCard.groups.push({
           uid: 'layerColorsGroup',
-          displayName: '',
+          displayName: 'Layer Colors',
           slices: layerSlices,
-        }],
-      };
-
-      model.cards.push(layerColorsCard);
+        });
+      }
     }
 
-    // In node layer mode, add per-layer node color pickers
+    // In node layer mode, add per-layer node color pickers into Nodes card
     if (this.settings.nodeColorMode === 'layer' && this.currentNodeLayerDepths.length > 0) {
       const nodeLayerSlices = this.currentNodeLayerDepths
         .filter(d => d < MAX_LAYER_COLORS)
@@ -1089,20 +1091,17 @@ export class Visual implements IVisual {
           },
         })) as unknown as powerbi.visuals.FormattingSlice[];
 
-      const nodeLayerColorsCard: powerbi.visuals.FormattingCard = {
-        uid: 'nodeLayerColorsCard',
-        displayName: 'Node Layer Colors',
-        groups: [{
+      const nodesCard = findCard('nodeSettings_card', 'Nodes');
+      if (nodesCard) {
+        nodesCard.groups.push({
           uid: 'nodeLayerColorsGroup',
-          displayName: '',
+          displayName: 'Layer Colors',
           slices: nodeLayerSlices,
-        }],
-      };
-
-      model.cards.push(nodeLayerColorsCard);
+        });
+      }
     }
 
-    // In label layer mode, add per-layer label color pickers
+    // In label layer mode, add per-layer label color pickers into Node Labels card
     if (this.settings.labelColorMode === 'layer' && this.currentLabelLayerDepths.length > 0) {
       const labelLayerSlices = this.currentLabelLayerDepths
         .filter(d => d < MAX_LAYER_COLORS)
@@ -1124,17 +1123,14 @@ export class Visual implements IVisual {
           },
         })) as unknown as powerbi.visuals.FormattingSlice[];
 
-      const labelLayerColorsCard: powerbi.visuals.FormattingCard = {
-        uid: 'labelLayerColorsCard',
-        displayName: 'Label Layer Colors',
-        groups: [{
+      const labelsCard = findCard('labelSettings_card', 'Node Labels');
+      if (labelsCard) {
+        labelsCard.groups.push({
           uid: 'labelLayerColorsGroup',
-          displayName: '',
+          displayName: 'Layer Colors',
           slices: labelLayerSlices,
-        }],
-      };
-
-      model.cards.push(labelLayerColorsCard);
+        });
+      }
     }
 
     return model;
