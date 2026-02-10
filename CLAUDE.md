@@ -16,13 +16,8 @@ npm run type-check       # TypeScript check (tsc --noEmit)
 npm test                 # Run vitest tests
 
 # Power BI Visual
-npm run pbiviz:install   # Install Power BI dependencies
-npm run pbiviz:start     # Start Power BI dev server (https://localhost:8080)
-npm run pbiviz:package   # Build .pbiviz file for distribution
-
-# In powerbi/ directory
-cd powerbi && npx pbiviz start    # Development server with hot reload
-cd powerbi && npx pbiviz package  # Create distributable .pbiviz file
+npm run start            # Start Power BI dev server (https://localhost:8080)
+npm run package          # Build .pbiviz file for distribution
 ```
 
 ## Architecture
@@ -30,13 +25,12 @@ cd powerbi && npx pbiviz package  # Create distributable .pbiviz file
 The project is a standalone Power BI Custom Visual. All source code lives in a single file:
 
 ```
-powerbi/
 ├── src/
 │   └── visual.ts          # Visual entry point (all logic in one file)
 ├── capabilities.json      # Power BI data roles and objects
 ├── pbiviz.json            # Power BI visual metadata
-├── tsconfig.json          # TypeScript config for pbiviz build
-├── package.json           # Power BI dependencies
+├── tsconfig.json          # TypeScript config
+├── package.json           # Dependencies
 ├── style/
 │   └── visual.less        # Styles
 ├── assets/                # Visual icon
@@ -54,13 +48,13 @@ powerbi/
 ```
 Power BI DataView
     ↓
-transformDataView()  [powerbi/src/visual.ts]
+transformDataView()  [src/visual.ts]
     ↓
 SankeyData { nodes[], links[] }
     ↓
-parseSettings()  [powerbi/src/visual.ts]
+parseSettings()  [src/visual.ts]
     ↓
-Visual.renderSankey()  [powerbi/src/visual.ts]
+Visual.renderSankey()  [src/visual.ts]
 ```
 
 **Data Roles (capabilities.json):**
@@ -71,8 +65,8 @@ Visual.renderSankey()  [powerbi/src/visual.ts]
 ## Power BI Visual Development
 
 1. Enable developer visuals in Power BI Desktop: File → Options → Security → Enable developer visual
-2. Run `npm run pbiviz:start`
+2. Run `npm run start`
 3. Add "Developer visual" from visualization pane
 4. Map Source, Target, Value fields
 
-The visual entry point is `powerbi/src/visual.ts` which exports `Visual` and `SankeyVisual` classes implementing Power BI's `IVisual` interface.
+The visual entry point is `src/visual.ts` which exports `Visual` and `SankeyVisual` classes implementing Power BI's `IVisual` interface.

@@ -7,11 +7,7 @@ Power BI用のSankey Chartカスタムビジュアルです。
 ### 1. 依存関係のインストール
 
 ```bash
-# ルートディレクトリで実行
 npm install
-
-# powerbiディレクトリで実行
-cd powerbi && npm install
 ```
 
 ### 2. Power BI 開発者ツールのインストール
@@ -35,11 +31,7 @@ pbiviz --install-cert
 ### 開発サーバーの起動
 
 ```bash
-# ルートから
-npm run pbiviz:start
-
-# または powerbi/ ディレクトリから
-cd powerbi && npx pbiviz start
+npm run start
 ```
 
 ### Power BI Desktop での確認
@@ -64,10 +56,10 @@ npm test
 ## パッケージング
 
 ```bash
-npm run pbiviz:package
+npm run package
 ```
 
-`powerbi/dist/` ディレクトリに `.pbiviz` ファイルが生成されます。
+`dist/` ディレクトリに `.pbiviz` ファイルが生成されます。
 
 ## Power BI Desktop へのインポート
 
@@ -78,7 +70,6 @@ npm run pbiviz:package
 ## ディレクトリ構造
 
 ```
-powerbi/
 ├── pbiviz.json          # ビジュアルメタデータ
 ├── capabilities.json    # データロール・フォーマット定義
 ├── tsconfig.json        # TypeScript設定
@@ -143,7 +134,7 @@ powerbi/
 ### ビジュアルが表示されない
 - 開発者ビジュアルが有効になっているか確認
 - コンソールでエラーを確認
-- `pbiviz start` が正常に実行されているか確認
+- `npm run start` が正常に実行されているか確認
 
 ### データが表示されない
 - Source、Target、Valueの全フィールドがマッピングされているか確認

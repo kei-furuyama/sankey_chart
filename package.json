@@ -2,14 +2,18 @@
   "name": "sankey-chart-powerbi",
   "version": "1.0.0",
   "description": "High-performance Sankey Chart Power BI Custom Visual",
+  "main": "src/visual.ts",
   "private": true,
   "scripts": {
     "type-check": "tsc --noEmit",
     "test": "vitest",
-    "clean": "rm -rf node_modules/.cache",
-    "pbiviz:start": "cd powerbi && pbiviz start",
-    "pbiviz:package": "cd powerbi && pbiviz package",
-    "pbiviz:install": "npm install --prefix powerbi"
+    "start": "pbiviz start",
+    "package": "pbiviz package"
+  },
+  "dependencies": {
+    "d3": "^7.9.0",
+    "d3-sankey": "^0.12.3",
+    "powerbi-visuals-utils-formattingutils": "^6.1.2"
   },
   "devDependencies": {
     "@types/d3": "^7.4.3",
@@ -18,9 +22,11 @@
     "@types/d3-scale": "^4.0.8",
     "@types/d3-shape": "^3.1.6",
     "@types/node": "^20.11.0",
+    "less": "^4.2.0",
     "powerbi-visuals-api": "^5.9.0",
     "powerbi-visuals-tools": "^5.4.0",
     "powerbi-visuals-utils-dataviewutils": "^6.1.0",
+    "powerbi-visuals-utils-formattingmodel": "^6.2.2",
     "typescript": "^5.3.3",
     "vitest": "^1.2.2"
   },

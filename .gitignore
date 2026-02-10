@@ -29,5 +29,5 @@ Thumbs.db
 *.tsbuildinfo
 
 # Power BI
-powerbi/.tmp/
-powerbi/webpack.statistics.*.html
+.tmp/
+webpack.statistics.*.html
