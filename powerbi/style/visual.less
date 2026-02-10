@@ -11,6 +11,9 @@
 @sankey-font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
 @sankey-text-color: #333333;
 @sankey-focus-color: #1f77b4;
+@sankey-landing-text-color: #666666;
+@sankey-link-hover-opacity: 0.7;
+@sankey-focus-border-width: 2px;
 
 // Animation
 @sankey-transition-duration: 200ms;
@@ -61,7 +64,7 @@
     transition: fill-opacity @sankey-transition-duration @sankey-transition-easing;
 
     &:hover {
-      fill-opacity: 0.7;
+      fill-opacity: @sankey-link-hover-opacity;
     }
   }
 }
@@ -87,7 +90,7 @@
   width: 100%;
   font-family: @sankey-font-family;
   font-size: 14px;
-  color: #666666;
+  color: @sankey-landing-text-color;
   text-align: center;
   box-sizing: border-box;
 }
@@ -97,10 +100,10 @@
 // =============================================================================
 
 .nodes g rect.focused {
-  outline: 2px solid @sankey-focus-color;
-  outline-offset: 2px;
+  outline: @sankey-focus-border-width solid @sankey-focus-color;
+  outline-offset: @sankey-focus-border-width;
   stroke: @sankey-focus-color;
-  stroke-width: 2px;
+  stroke-width: @sankey-focus-border-width;
 }
 
 // =============================================================================

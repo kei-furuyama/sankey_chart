@@ -28,64 +28,63 @@ import ISelectionManager = powerbi.extensibility.ISelectionManager;
 import ISelectionId = powerbi.extensibility.ISelectionId;
 import IVisualEventService = powerbi.extensibility.IVisualEventService;
 import ILocalizationManager = powerbi.extensibility.ILocalizationManager;
-import VisualUpdateType = powerbi.VisualUpdateType;
 
 // Types
 
-interface SankeyNodeDatum {
+export interface SankeyNodeDatum {
   id: string;
   name: string;
   color?: string;
   selectionId?: ISelectionId;
 }
 
-interface SankeyLinkDatum {
+export interface SankeyLinkDatum {
   source: string;
   target: string;
   value: number;
   selectionIds?: ISelectionId[];
 }
 
-interface SankeyData {
+export interface SankeyData {
   nodes: SankeyNodeDatum[];
   links: SankeyLinkDatum[];
   valueMeasureName: string;
 }
 
-interface TransformDataViewOptions {
+export interface TransformDataViewOptions {
   dataView: DataView | undefined;
   host: IVisualHost;
   nodeColorMode?: NodeColorMode;
   nodeDefaultColor?: string;
 }
 
-type ComputedNode = SankeyNode<SankeyNodeDatum, SankeyLinkDatum>;
-type ComputedLink = SankeyLink<SankeyNodeDatum, SankeyLinkDatum>;
+export type ComputedNode = SankeyNode<SankeyNodeDatum, SankeyLinkDatum>;
+export type ComputedLink = SankeyLink<SankeyNodeDatum, SankeyLinkDatum>;
 
 // Settings
 
-type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'inputOrder' | 'none';
-type NodeColorMode = 'single' | 'category' | 'layer';
-type LinkColorMode = 'source' | 'target' | 'gradient' | 'fixed' | 'layer';
-type LabelColorMode = 'single' | 'layer';
-type DataLabelDisplayMode = 'value' | 'percentage' | 'both';
+export type LinkSortMode = 'ascending' | 'descending' | 'byValue' | 'byValueDesc' | 'inputOrder' | 'none';
+export type NodeColorMode = 'single' | 'category' | 'layer';
+export type LinkColorMode = 'source' | 'target' | 'gradient' | 'fixed' | 'layer';
+export type LabelColorMode = 'single' | 'layer';
+export type DataLabelDisplayMode = 'value' | 'percentage' | 'both';
 
-const VALID_LINK_SORT_MODES: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
-const VALID_NODE_COLOR_MODES: NodeColorMode[] = ['single', 'category', 'layer'];
-const VALID_LINK_COLOR_MODES: LinkColorMode[] = ['source', 'target', 'gradient', 'fixed', 'layer'];
-const VALID_LABEL_COLOR_MODES: LabelColorMode[] = ['single', 'layer'];
+export const VALID_LINK_SORT_MODES: LinkSortMode[] = ['ascending', 'descending', 'byValue', 'byValueDesc', 'inputOrder', 'none'];
+export const VALID_NODE_COLOR_MODES: NodeColorMode[] = ['single', 'category', 'layer'];
+export const VALID_LINK_COLOR_MODES: LinkColorMode[] = ['source', 'target', 'gradient', 'fixed', 'layer'];
+export const VALID_LABEL_COLOR_MODES: LabelColorMode[] = ['single', 'layer'];
 
 /** Gap in px between a node rect edge and its label text */
 const LABEL_OFFSET = 6;
-const MAX_LAYER_COLORS = 10;
+export const MAX_LAYER_COLORS = 10;
 /** Fixed default colours for layer modes so that changing one layer does not shift others */
-const DEFAULT_LAYER_PALETTE = [
+export const DEFAULT_LAYER_PALETTE = [
   '#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f',
   '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac',
 ];
-const VALID_DATA_LABEL_DISPLAY_MODES: DataLabelDisplayMode[] = ['value', 'percentage', 'both'];
+export const VALID_DATA_LABEL_DISPLAY_MODES: DataLabelDisplayMode[] = ['value', 'percentage', 'both'];
 
-interface VisualSettings {
+export interface VisualSettings {
   nodeWidth: number;
   nodePadding: number;
   iterations: number;
@@ -116,7 +115,7 @@ interface VisualSettings {
   marginLeft: number;
 }
 
-const DEFAULT_SETTINGS: VisualSettings = {
+export const DEFAULT_SETTINGS: VisualSettings = {
   nodeWidth: 24,
   nodePadding: 16,
   iterations: 6,
@@ -481,7 +480,7 @@ class VisualFormattingSettingsModel extends formattingSettings.Model {
  * - string (direct value)
  * - object { value: string, displayName?: string }
  */
-function extractDropdownValue(raw: unknown, defaultValue: string): string {
+export function extractDropdownValue(raw: unknown, defaultValue: string): string {
   if (raw === null || raw === undefined) {
     return defaultValue;
   }
@@ -498,19 +497,19 @@ function extractDropdownValue(raw: unknown, defaultValue: string): string {
 /**
  * Extract a solid color value from a Power BI fill object.
  */
-function extractFillColor(raw: unknown): string | undefined {
+export function extractFillColor(raw: unknown): string | undefined {
   return (raw as { solid?: { color?: string } } | undefined)?.solid?.color;
 }
 
 /**
  * Extract and validate a dropdown value against a list of valid options.
  */
-function extractValidatedDropdown<T extends string>(raw: unknown, validValues: T[], defaultValue: T): T {
+export function extractValidatedDropdown<T extends string>(raw: unknown, validValues: T[], defaultValue: T): T {
   const extracted = extractDropdownValue(raw, defaultValue);
   return validValues.includes(extracted as T) ? (extracted as T) : defaultValue;
 }
 
-function parseSettings(dataView: DataView): VisualSettings {
+export function parseSettings(dataView: DataView): VisualSettings {
   const objects = dataView?.metadata?.objects;
   if (!objects) {
     return { ...DEFAULT_SETTINGS };
@@ -562,7 +561,7 @@ function parseSettings(dataView: DataView): VisualSettings {
 // Only link.value, link.source, link.target, and link.index are available.
 // Sorting by y0/y1 will NOT work because they are all undefined at sort time.
 
-function getLinkSortFunction(
+export function getLinkSortFunction(
   mode: LinkSortMode
 ): ((a: { value: number; index?: number }, b: { value: number; index?: number }) => number) | null | undefined {
   switch (mode) {
@@ -591,7 +590,7 @@ function getLinkSortFunction(
   }
 }
 
-function resolveNode(endpoint: string | number | ComputedNode): ComputedNode {
+export function resolveNode(endpoint: string | number | ComputedNode): ComputedNode {
   if (typeof endpoint === 'object' && endpoint !== null && 'id' in endpoint) {
     return endpoint;
   }
@@ -600,7 +599,7 @@ function resolveNode(endpoint: string | number | ComputedNode): ComputedNode {
 
 // Data Transformer
 
-function transformDataView(options: TransformDataViewOptions): SankeyData | null {
+export function transformDataView(options: TransformDataViewOptions): SankeyData | null {
   const { dataView, host } = options;
 
   if (!dataView?.categorical) {
@@ -870,9 +869,7 @@ export class Visual implements IVisual {
       this.svg.selectAll('.nodes g')
         .filter((_: unknown, i: number) => i === this.focusedNodeIndex)
         .select('rect')
-        .attr('stroke', this.isHighContrastMode && this.highContrastColors
-          ? this.highContrastColors.foregroundSelected
-          : '#0078d4')
+        .attr('stroke', this.hcForegroundSelected('#0078d4'))
         .attr('stroke-width', 2)
         .attr('stroke-dasharray', '4,2')
         .classed('focused', true);
@@ -883,12 +880,9 @@ export class Visual implements IVisual {
    * Clear focus indicator from all nodes
    */
   private clearNodeFocus(): void {
-    const isHighContrast = this.isHighContrastMode;
-    const hcColors = this.highContrastColors;
-
     this.svg.selectAll('.nodes g rect')
-      .attr('stroke', isHighContrast && hcColors ? hcColors.foreground : 'none')
-      .attr('stroke-width', isHighContrast ? 1 : 0)
+      .attr('stroke', this.hcForeground('none'))
+      .attr('stroke-width', this.isHighContrastMode ? 1 : 0)
       .attr('stroke-dasharray', null)
       .classed('focused', false);
   }
@@ -920,7 +914,6 @@ export class Visual implements IVisual {
   private updateSelectionState(selectedIds: ISelectionId[]): void {
     const hasSelection = selectedIds.length > 0;
     const { linkOpacity } = this.settings;
-    const isHighContrast = this.isHighContrastMode;
 
     // Pre-build Set for O(1) lookup instead of O(n) per check
     const selectedKeySet = new Set(selectedIds.map(id => this.getSelectionKey(id)));
@@ -944,7 +937,7 @@ export class Visual implements IVisual {
         return linkSelectionIds.some(lid => isSelected(lid)) ? 1 : 0.2;
       })
       .attr('stroke-opacity', (d: unknown) => {
-        if (!hasSelection) return isHighContrast ? 0.8 : linkOpacity;
+        if (!hasSelection) return this.isHighContrastMode ? 0.8 : linkOpacity;
         const link = d as ComputedLink;
         const linkSelectionIds = (link as unknown as SankeyLinkDatum).selectionIds ?? [];
         return linkSelectionIds.some(lid => isSelected(lid)) ? 0.8 : 0.2;
@@ -1097,6 +1090,39 @@ export class Visual implements IVisual {
     }
   }
 
+  private hcForeground(fallback: string): string {
+    return this.isHighContrastMode && this.highContrastColors
+      ? this.highContrastColors.foreground
+      : fallback;
+  }
+
+  private hcBackground(fallback: string): string {
+    return this.isHighContrastMode && this.highContrastColors
+      ? this.highContrastColors.background
+      : fallback;
+  }
+
+  private hcForegroundSelected(fallback: string): string {
+    return this.isHighContrastMode && this.highContrastColors
+      ? this.highContrastColors.foregroundSelected
+      : fallback;
+  }
+
+  private populateLayerColorMap(
+    targetMap: Map<number, string>,
+    isLayerMode: boolean,
+    metadataObjects: Record<string, unknown> | undefined,
+  ): void {
+    targetMap.clear();
+    if (!isLayerMode || !metadataObjects) return;
+    for (let i = 0; i < MAX_LAYER_COLORS; i++) {
+      const color = extractFillColor(metadataObjects[`layer${i}`]);
+      if (color) {
+        targetMap.set(i, color);
+      }
+    }
+  }
+
   public update(options: VisualUpdateOptions): void {
     // Signal rendering started
     this.eventService.renderingStarted(options);
@@ -1137,47 +1163,11 @@ export class Visual implements IVisual {
         // Invalidate cached formatter since settings may have changed
         this.cachedFormatter = null;
 
-        // Extract user layer colors from metadata objects (only in layer mode)
-        this.userLayerColors.clear();
-        if (this.settings.linkColorMode === 'layer') {
-          const layerObjs = dataView.metadata?.objects?.layerColors;
-          if (layerObjs) {
-            for (let i = 0; i < MAX_LAYER_COLORS; i++) {
-              const color = extractFillColor(layerObjs[`layer${i}`]);
-              if (color) {
-                this.userLayerColors.set(i, color);
-              }
-            }
-          }
-        }
-
-        // Extract user node layer colors from metadata objects (only in node layer mode)
-        this.userNodeLayerColors.clear();
-        if (this.settings.nodeColorMode === 'layer') {
-          const nodeLayerObjs = dataView.metadata?.objects?.nodeLayerColors;
-          if (nodeLayerObjs) {
-            for (let i = 0; i < MAX_LAYER_COLORS; i++) {
-              const color = extractFillColor(nodeLayerObjs[`layer${i}`]);
-              if (color) {
-                this.userNodeLayerColors.set(i, color);
-              }
-            }
-          }
-        }
-
-        // Extract user label layer colors from metadata objects (only in label layer mode)
-        this.userLabelLayerColors.clear();
-        if (this.settings.labelColorMode === 'layer') {
-          const labelLayerObjs = dataView.metadata?.objects?.labelLayerColors;
-          if (labelLayerObjs) {
-            for (let i = 0; i < MAX_LAYER_COLORS; i++) {
-              const color = extractFillColor(labelLayerObjs[`layer${i}`]);
-              if (color) {
-                this.userLabelLayerColors.set(i, color);
-              }
-            }
-          }
-        }
+        // Extract user layer colors from metadata objects
+        const metaObjects = dataView.metadata?.objects;
+        this.populateLayerColorMap(this.userLayerColors, this.settings.linkColorMode === 'layer', metaObjects?.layerColors);
+        this.populateLayerColorMap(this.userNodeLayerColors, this.settings.nodeColorMode === 'layer', metaObjects?.nodeLayerColors);
+        this.populateLayerColorMap(this.userLabelLayerColors, this.settings.labelColorMode === 'layer', metaObjects?.labelLayerColors);
       }
 
       this.svg
@@ -1318,9 +1308,7 @@ export class Visual implements IVisual {
     const formatter = this.getValueFormatter();
     const tooltipService = this.tooltipService;
     const selectionManager = this.selectionManager;
-    const isHighContrast = this.isHighContrastMode;
-    const hcColors = this.highContrastColors;
-    const isGradient = linkColorMode === 'gradient' && !isHighContrast;
+    const isGradient = linkColorMode === 'gradient' && !this.isHighContrastMode;
 
     // Build layer color map if layer mode
     const layerColorMap = new Map<number, string>();
@@ -1361,8 +1349,8 @@ export class Visual implements IVisual {
     }
 
     const getLinkColor = (d: ComputedLink, i: number): string => {
-      if (isHighContrast && hcColors) {
-        return hcColors.foreground;
+      if (this.isHighContrastMode) {
+        return this.hcForeground('#aaa');
       }
       switch (linkColorMode) {
         case 'gradient':
@@ -1381,7 +1369,7 @@ export class Visual implements IVisual {
       }
     };
 
-    const finalOpacity = isHighContrast ? 0.8 : linkOpacity;
+    const finalOpacity = this.isHighContrastMode ? 0.8 : linkOpacity;
 
     container.append('g')
       .classed('links', true)
@@ -1442,7 +1430,7 @@ export class Visual implements IVisual {
         });
       })
       .on('mouseout', (event: MouseEvent) => {
-        select(event.currentTarget as SVGPathElement).attr('stroke-opacity', isHighContrast ? 0.8 : linkOpacity);
+        select(event.currentTarget as SVGPathElement).attr('stroke-opacity', this.isHighContrastMode ? 0.8 : linkOpacity);
         tooltipService.hide({ immediately: true, isTouchEvent: false });
       });
 
@@ -1465,10 +1453,8 @@ export class Visual implements IVisual {
   ): void {
     const { linkLabelFontSize } = this.settings;
     const formatter = this.getValueFormatter();
-    const isHighContrast = this.isHighContrastMode;
-    const hcColors = this.highContrastColors;
-    const textColor = isHighContrast && hcColors ? hcColors.foreground : '#374151';
-    const bgColor = isHighContrast && hcColors ? hcColors.background : 'rgba(255, 255, 255, 0.85)';
+    const textColor = this.hcForeground('#374151');
+    const bgColor = this.hcBackground('rgba(255, 255, 255, 0.85)');
     const minLinkWidth = 8;
     const labelPadding = 4;
 
@@ -1535,15 +1521,10 @@ export class Visual implements IVisual {
   ): void {
     const tooltipService = this.tooltipService;
     const selectionManager = this.selectionManager;
-    const isHighContrast = this.isHighContrastMode;
-    const hcColors = this.highContrastColors;
     const { nodeDefaultColor } = this.settings;
 
     const getNodeColor = (d: ComputedNode): string => {
-      if (isHighContrast && hcColors) {
-        return hcColors.foreground;
-      }
-      return d.color ?? nodeDefaultColor;
+      return this.hcForeground(d.color ?? nodeDefaultColor);
     };
 
     const nodeGroups = container.append('g')
@@ -1560,8 +1541,8 @@ export class Visual implements IVisual {
       .attr('width', d => (d.x1 ?? 0) - (d.x0 ?? 0))
       .attr('height', d => (d.y1 ?? 0) - (d.y0 ?? 0))
       .attr('fill', getNodeColor)
-      .attr('stroke', isHighContrast && hcColors ? hcColors.foreground : 'none')
-      .attr('stroke-width', isHighContrast ? 1 : 0)
+      .attr('stroke', this.hcForeground('none'))
+      .attr('stroke-width', this.isHighContrastMode ? 1 : 0)
       .on('click', (event: MouseEvent, d: ComputedNode) => {
         // Handle click selection for nodes (only if interactions allowed)
         if (!this.allowInteractions) return;
@@ -1583,9 +1564,7 @@ export class Visual implements IVisual {
         event.stopPropagation();
       })
       .on('mouseover', (event: MouseEvent, d: ComputedNode) => {
-        const highlightColor = isHighContrast && hcColors
-          ? hcColors.foregroundSelected
-          : '#000';
+        const highlightColor = this.hcForegroundSelected('#000');
         select(event.currentTarget as SVGRectElement).attr('stroke', highlightColor).attr('stroke-width', 2);
 
         const totalValue = d.value ?? 0;
@@ -1613,8 +1592,8 @@ export class Visual implements IVisual {
         const el = select(event.currentTarget as SVGRectElement);
         // Preserve keyboard focus ring when mouse leaves
         if (!el.classed('focused')) {
-          const strokeColor = isHighContrast && hcColors ? hcColors.foreground : 'none';
-          const strokeWidth = isHighContrast ? 1 : 0;
+          const strokeColor = this.hcForeground('none');
+          const strokeWidth = this.isHighContrastMode ? 1 : 0;
           el.attr('stroke', strokeColor).attr('stroke-width', strokeWidth);
         }
         tooltipService.hide({ immediately: true, isTouchEvent: false });
@@ -1634,10 +1613,8 @@ export class Visual implements IVisual {
     chartWidth: number
   ): void {
     const { labelFontSize, labelColor, labelColorMode, labelFontFamily } = this.settings;
-    const isHighContrast = this.isHighContrastMode;
-    const hcColors = this.highContrastColors;
-    const useLayerColor = !isHighContrast && labelColorMode === 'layer';
-    const textColor = isHighContrast && hcColors ? hcColors.foreground : labelColor;
+    const useLayerColor = !this.isHighContrastMode && labelColorMode === 'layer';
+    const textColor = this.hcForeground(labelColor);
     const midPoint = chartWidth / 2;
     const labelOffset = LABEL_OFFSET;
 
@@ -1666,9 +1643,7 @@ export class Visual implements IVisual {
     layerTotals: Map<number, number>
   ): void {
     const { dataLabelFontSize, dataLabelColor, dataLabelFontFamily, dataLabelDisplayMode, percentDecimalPlaces } = this.settings;
-    const isHighContrast = this.isHighContrastMode;
-    const hcColors = this.highContrastColors;
-    const textColor = isHighContrast && hcColors ? hcColors.foreground : dataLabelColor;
+    const textColor = this.hcForeground(dataLabelColor);
     const midPoint = chartWidth / 2;
     const labelOffset = LABEL_OFFSET;
     const showLabels = this.settings.showLabels;
@@ -1708,11 +1683,9 @@ export class Visual implements IVisual {
    * Show landing page when no data is available
    */
   private showLandingPage(viewport: IViewport): void {
-    const isHighContrast = this.isHighContrastMode;
-    const hcColors = this.highContrastColors;
-    const textColor = isHighContrast && hcColors ? hcColors.foreground : '#333';
-    const subtextColor = isHighContrast && hcColors ? hcColors.foreground : '#555';
-    const iconColor = isHighContrast && hcColors ? hcColors.foreground : '#0078d4';
+    const textColor = this.hcForeground('#333');
+    const subtextColor = this.hcForeground('#555');
+    const iconColor = this.hcForeground('#0078d4');
 
     const centerX = viewport.width / 2;
     const centerY = viewport.height / 2;
