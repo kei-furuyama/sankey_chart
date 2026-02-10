@@ -7,9 +7,11 @@ Power BI用のSankey Chartカスタムビジュアルです。
 ### 1. 依存関係のインストール
 
 ```bash
-# powerbiディレクトリで実行
-cd powerbi
+# ルートディレクトリで実行
 npm install
+
+# powerbiディレクトリで実行
+cd powerbi && npm install
 ```
 
 ### 2. Power BI 開発者ツールのインストール
@@ -28,26 +30,16 @@ npm install -g powerbi-visuals-tools
 pbiviz --install-cert
 ```
 
-### 4. アイコンの作成
-
-`assets/icon.svg` を 20x20 の PNG に変換して `assets/icon.png` として保存してください。
-
-オンラインツールや以下のコマンドで変換できます：
-
-```bash
-# ImageMagickを使用する場合
-convert assets/icon.svg -resize 20x20 assets/icon.png
-
-# またはresvgを使用する場合
-resvg assets/icon.svg assets/icon.png -w 20 -h 20
-```
-
 ## 開発
 
 ### 開発サーバーの起動
 
 ```bash
-pbiviz start
+# ルートから
+npm run pbiviz:start
+
+# または powerbi/ ディレクトリから
+cd powerbi && npx pbiviz start
 ```
 
 ### Power BI Desktop での確認
@@ -63,13 +55,19 @@ pbiviz start
 - **Target**: フローの終了ノード
 - **Value**: フローの値（量）
 
+## テスト
+
+```bash
+npm test
+```
+
 ## パッケージング
 
 ```bash
-pbiviz package
+npm run pbiviz:package
 ```
 
-`dist/` ディレクトリに `.pbiviz` ファイルが生成されます。
+`powerbi/dist/` ディレクトリに `.pbiviz` ファイルが生成されます。
 
 ## Power BI Desktop へのインポート
 
@@ -81,15 +79,22 @@ pbiviz package
 
 ```
 powerbi/
-├── pbiviz.json         # ビジュアルメタデータ
-├── capabilities.json   # データロール定義
-├── tsconfig.json       # TypeScript設定
-├── package.json        # 依存関係
+├── pbiviz.json          # ビジュアルメタデータ
+├── capabilities.json    # データロール・フォーマット定義
+├── tsconfig.json        # TypeScript設定
+├── package.json         # 依存関係
+├── README.md
 ├── assets/
-│   ├── icon.svg        # アイコン（SVG）
-│   └── icon.png        # アイコン（PNG、要作成）
-└── style/
-    └── visual.less     # スタイル
+│   ├── icon.svg         # アイコン（SVG）
+│   └── icon.png         # アイコン（PNG）
+├── src/
+│   ├── visual.ts        # ビジュアル本体（全ロジック）
+│   └── visual.test.ts   # テスト
+├── style/
+│   └── visual.less      # スタイル
+└── stringResources/
+    ├── en-US/resources.resjson
+    └── ja-JP/resources.resjson
 ```
 
 ## 設定オプション
@@ -97,20 +102,41 @@ powerbi/
 ### Nodes（ノード）
 - **Width**: ノードの幅
 - **Padding**: ノード間の間隔
-- **Default Color**: デフォルトの色
+- **Layout Iterations**: レイアウト最適化の反復回数
+- **Color Mode**: Category Colors / Single Color / By Layer
+- **Default Color**: 単色モード時のデフォルト色
 
 ### Links（リンク）
-- **Color Mode**: 色のモード（Source/Target/Gradient/Fixed）
-- **Opacity**: 透明度
+- **Default Color**: デフォルトの色
+- **Color Mode**: Source / Target / Gradient / Fixed / By Layer
+- **Opacity**: 透明度（%）
+- **Link Sort**: リンクの並び順
 
-### Labels（ラベル）
-- **Show Labels**: ラベルの表示/非表示
+### Node Labels（ノードラベル）
+- **Show**: 表示/非表示
 - **Font Size**: フォントサイズ
 - **Color**: ラベルの色
+- **Color Mode**: Single Color / By Layer
+- **Font**: フォントファミリー
 
-### Animation（アニメーション）
-- **Enable Animation**: アニメーションの有効/無効
-- **Duration**: アニメーション時間（ms）
+### Node Data Labels（ノードデータラベル）
+- **Show**: 表示/非表示
+- **Font Size**: フォントサイズ
+- **Color**: ラベルの色
+- **Font**: フォントファミリー
+- **Display Units**: 表示単位（Auto / None / Thousands / Millions / Billions）
+- **Display Mode**: Value / Percentage / Value & Percentage
+- **Decimal Places**: 小数点以下の桁数
+
+### Link Labels（リンクラベル）
+- **Show**: 表示/非表示
+- **Font Size**: フォントサイズ
+
+### Margins（マージン）
+- **Top / Right / Bottom / Left**: 各方向のマージン
+
+### Layer Colors
+- ノード・リンク・ラベルそれぞれに最大10レイヤー分の色を設定可能
 
 ## トラブルシューティング
 
