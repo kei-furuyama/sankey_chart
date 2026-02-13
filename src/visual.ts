@@ -77,6 +77,31 @@ export const VALID_LABEL_COLOR_MODES: LabelColorMode[] = ['single', 'layer'];
 
 /** Gap in px between a node rect edge and its label text */
 const LABEL_OFFSET = 6;
+/** Minimum link width (px) to render a link label */
+const MIN_LINK_WIDTH_FOR_LABEL = 8;
+/** Padding (px) inside link label backgrounds */
+const LINK_LABEL_PADDING = 4;
+/** Approximate character width as a ratio of font size */
+const CHAR_WIDTH_RATIO = 0.6;
+/** Line height multiplier for text elements */
+const TEXT_LINE_HEIGHT = 1.4;
+/** Border radius (px) for link label backgrounds */
+const BG_LABEL_BORDER_RADIUS = 3;
+/** Opacity for link label backgrounds */
+const BG_LABEL_OPACITY = 0.9;
+/** Stroke width (px) for keyboard focus indicators */
+const FOCUS_STROKE_WIDTH = 2;
+/** Dash pattern for keyboard focus indicators */
+const FOCUS_DASH_ARRAY = '4,2';
+/** Opacity for selected elements */
+const SELECTED_OPACITY = 1;
+/** Opacity for unselected nodes/labels when selection is active */
+const UNSELECTED_NODE_OPACITY = 0.3;
+/** Opacity for unselected links when selection is active */
+const UNSELECTED_LINK_OPACITY = 0.2;
+/** Opacity for highlighted/selected links */
+const HIGHLIGHTED_LINK_OPACITY = 0.8;
+/** Maximum number of layers with individually configurable colors */
 export const MAX_LAYER_COLORS = 10;
 /** Fixed default colours for layer modes so that changing one layer does not shift others */
 export const DEFAULT_LAYER_PALETTE = [
@@ -489,17 +514,31 @@ export function extractDropdownValue(raw: unknown, defaultValue: string): string
     return raw;
   }
   if (typeof raw === 'object' && 'value' in raw) {
-    const val = (raw as { value?: string }).value;
-    return typeof val === 'string' ? val : defaultValue;
+    return typeof raw.value === 'string' ? raw.value : defaultValue;
   }
   return defaultValue;
+}
+
+export function extractNumber(raw: unknown, defaultValue: number): number {
+  return typeof raw === 'number' ? raw : defaultValue;
+}
+export function extractBoolean(raw: unknown, defaultValue: boolean): boolean {
+  return typeof raw === 'boolean' ? raw : defaultValue;
+}
+export function extractString(raw: unknown, defaultValue: string): string {
+  return typeof raw === 'string' ? raw : defaultValue;
 }
 
 /**
  * Extract a solid color value from a Power BI fill object.
  */
 export function extractFillColor(raw: unknown): string | undefined {
-  return (raw as { solid?: { color?: string } } | undefined)?.solid?.color;
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  if (!('solid' in raw)) return undefined;
+  const solid = (raw as Record<string, unknown>).solid;
+  if (typeof solid !== 'object' || solid === null) return undefined;
+  const color = (solid as Record<string, unknown>).color;
+  return typeof color === 'string' ? color : undefined;
 }
 
 /**
@@ -519,34 +558,34 @@ export function parseSettings(dataView: DataView): VisualSettings {
   const { nodeSettings, linkSettings, linkLabelSettings, labelSettings, dataLabelSettings, marginSettings } = objects;
 
   return {
-    nodeWidth: (nodeSettings?.width as number) ?? DEFAULT_SETTINGS.nodeWidth,
-    nodePadding: (nodeSettings?.padding as number) ?? DEFAULT_SETTINGS.nodePadding,
-    iterations: (nodeSettings?.iterations as number) ?? DEFAULT_SETTINGS.iterations,
+    nodeWidth: extractNumber(nodeSettings?.width, DEFAULT_SETTINGS.nodeWidth),
+    nodePadding: extractNumber(nodeSettings?.padding, DEFAULT_SETTINGS.nodePadding),
+    iterations: extractNumber(nodeSettings?.iterations, DEFAULT_SETTINGS.iterations),
     nodeDefaultColor: extractFillColor(nodeSettings?.defaultColor) ?? DEFAULT_SETTINGS.nodeDefaultColor,
     nodeColorMode: extractValidatedDropdown(nodeSettings?.colorMode, VALID_NODE_COLOR_MODES, DEFAULT_SETTINGS.nodeColorMode),
-    linkOpacity: ((linkSettings?.opacity as number) ?? 50) / 100,
+    linkOpacity: extractNumber(linkSettings?.opacity, 50) / 100,
     linkColorMode: extractValidatedDropdown(linkSettings?.colorMode, VALID_LINK_COLOR_MODES, DEFAULT_SETTINGS.linkColorMode),
     linkDefaultColor: extractFillColor(linkSettings?.defaultColor) ?? DEFAULT_SETTINGS.linkDefaultColor,
     linkSort: extractValidatedDropdown(linkSettings?.sortMode, VALID_LINK_SORT_MODES, DEFAULT_SETTINGS.linkSort),
-    showLinkLabels: (linkLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLinkLabels,
-    linkLabelFontSize: (linkLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.linkLabelFontSize,
-    labelFontSize: (labelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.labelFontSize,
+    showLinkLabels: extractBoolean(linkLabelSettings?.show, DEFAULT_SETTINGS.showLinkLabels),
+    linkLabelFontSize: extractNumber(linkLabelSettings?.fontSize, DEFAULT_SETTINGS.linkLabelFontSize),
+    labelFontSize: extractNumber(labelSettings?.fontSize, DEFAULT_SETTINGS.labelFontSize),
     labelColor: extractFillColor(labelSettings?.color) ?? DEFAULT_SETTINGS.labelColor,
     labelColorMode: extractValidatedDropdown(labelSettings?.colorMode, VALID_LABEL_COLOR_MODES, DEFAULT_SETTINGS.labelColorMode),
-    labelFontFamily: (labelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.labelFontFamily,
-    showLabels: (labelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showLabels,
-    showDataLabels: (dataLabelSettings?.show as boolean) ?? DEFAULT_SETTINGS.showDataLabels,
-    dataLabelFontSize: (dataLabelSettings?.fontSize as number) ?? DEFAULT_SETTINGS.dataLabelFontSize,
+    labelFontFamily: extractString(labelSettings?.fontFamily, DEFAULT_SETTINGS.labelFontFamily),
+    showLabels: extractBoolean(labelSettings?.show, DEFAULT_SETTINGS.showLabels),
+    showDataLabels: extractBoolean(dataLabelSettings?.show, DEFAULT_SETTINGS.showDataLabels),
+    dataLabelFontSize: extractNumber(dataLabelSettings?.fontSize, DEFAULT_SETTINGS.dataLabelFontSize),
     dataLabelColor: extractFillColor(dataLabelSettings?.color) ?? DEFAULT_SETTINGS.dataLabelColor,
-    dataLabelFontFamily: (dataLabelSettings?.fontFamily as string) ?? DEFAULT_SETTINGS.dataLabelFontFamily,
+    dataLabelFontFamily: extractString(dataLabelSettings?.fontFamily, DEFAULT_SETTINGS.dataLabelFontFamily),
     dataLabelDisplayMode: extractValidatedDropdown(dataLabelSettings?.displayMode, VALID_DATA_LABEL_DISPLAY_MODES, DEFAULT_SETTINGS.dataLabelDisplayMode),
     displayUnits: Number(extractDropdownValue(dataLabelSettings?.displayUnits, String(DEFAULT_SETTINGS.displayUnits))) || 0,
-    decimalPlaces: (dataLabelSettings?.decimalPlaces as number) ?? DEFAULT_SETTINGS.decimalPlaces,
-    percentDecimalPlaces: (dataLabelSettings?.percentDecimalPlaces as number) ?? DEFAULT_SETTINGS.percentDecimalPlaces,
-    marginTop: (marginSettings?.top as number) ?? DEFAULT_SETTINGS.marginTop,
-    marginRight: (marginSettings?.right as number) ?? DEFAULT_SETTINGS.marginRight,
-    marginBottom: (marginSettings?.bottom as number) ?? DEFAULT_SETTINGS.marginBottom,
-    marginLeft: (marginSettings?.left as number) ?? DEFAULT_SETTINGS.marginLeft,
+    decimalPlaces: extractNumber(dataLabelSettings?.decimalPlaces, DEFAULT_SETTINGS.decimalPlaces),
+    percentDecimalPlaces: extractNumber(dataLabelSettings?.percentDecimalPlaces, DEFAULT_SETTINGS.percentDecimalPlaces),
+    marginTop: extractNumber(marginSettings?.top, DEFAULT_SETTINGS.marginTop),
+    marginRight: extractNumber(marginSettings?.right, DEFAULT_SETTINGS.marginRight),
+    marginBottom: extractNumber(marginSettings?.bottom, DEFAULT_SETTINGS.marginBottom),
+    marginLeft: extractNumber(marginSettings?.left, DEFAULT_SETTINGS.marginLeft),
   };
 }
 
@@ -598,7 +637,85 @@ export function resolveNode(endpoint: string | number | ComputedNode): ComputedN
   throw new Error(`Expected resolved ComputedNode but got ${typeof endpoint}`);
 }
 
+/** Access the original SankeyLinkDatum properties on a computed link. */
+export function linkDatum(link: ComputedLink): SankeyLinkDatum {
+  return link as unknown as SankeyLinkDatum;
+}
+
 // Cycle Resolution
+
+/**
+ * Run DFS on the link graph to find a cycle and return the index of the
+ * feedback link — the one going furthest backward in node position order.
+ * Returns -1 if no cycle is found.
+ */
+function findCycleFeedback(
+  remaining: SankeyLinkDatum[],
+  nodePos: ReadonlyMap<string, number>,
+): number {
+  const adj = new Map<string, number[]>();
+  for (let i = 0; i < remaining.length; i++) {
+    const source = remaining[i].source;
+    if (!adj.has(source)) adj.set(source, []);
+    adj.get(source)!.push(i);
+  }
+
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const color = new Map<string, number>();
+  for (const link of remaining) {
+    color.set(link.source, WHITE);
+    color.set(link.target, WHITE);
+  }
+
+  const parentLink = new Map<string, number>();
+  let feedbackIdx = -1;
+
+  const dfs = (currentNodeId: string): boolean => {
+    color.set(currentNodeId, GRAY);
+    for (const idx of adj.get(currentNodeId) ?? []) {
+      const neighborId = remaining[idx].target;
+      const nodeColor = color.get(neighborId) ?? BLACK;
+      if (nodeColor === GRAY) {
+        // Cycle found — collect all links in the cycle and pick
+        // the one going furthest backward in node position order.
+        const cycleIndices: number[] = [idx];
+        let cur = currentNodeId;
+        while (cur !== neighborId) {
+          const pIdx = parentLink.get(cur)!;
+          cycleIndices.push(pIdx);
+          cur = remaining[pIdx].source;
+        }
+
+        let bestDist = -Infinity;
+        let bestValue = Infinity;
+        for (const ci of cycleIndices) {
+          const link = remaining[ci];
+          const dist = (nodePos.get(link.source) ?? 0) - (nodePos.get(link.target) ?? 0);
+          if (dist > bestDist || (dist === bestDist && link.value < bestValue)) {
+            bestDist = dist;
+            bestValue = link.value;
+            feedbackIdx = ci;
+          }
+        }
+        return true;
+      }
+      if (nodeColor === WHITE) {
+        parentLink.set(neighborId, idx);
+        if (dfs(neighborId)) return true;
+      }
+    }
+    color.set(currentNodeId, BLACK);
+    return false;
+  };
+
+  for (const nodeId of color.keys()) {
+    if (color.get(nodeId) === WHITE) {
+      if (dfs(nodeId)) break;
+    }
+  }
+
+  return feedbackIdx;
+}
 
 /**
  * Break cycles in the link graph so that d3-sankey receives a DAG.
@@ -637,71 +754,8 @@ export function resolveCycles(
   let dupeCounter = 0;
 
   for (;;) {
-    const adj = new Map<string, number[]>();
-    for (let i = 0; i < remaining.length; i++) {
-      let list = adj.get(remaining[i].source);
-      if (!list) { list = []; adj.set(remaining[i].source, list); }
-      list.push(i);
-    }
-
-    const WHITE = 0, GRAY = 1, BLACK = 2;
-    const color = new Map<string, number>();
-    for (const link of remaining) {
-      color.set(link.source, WHITE);
-      color.set(link.target, WHITE);
-    }
-
-    const parentLink = new Map<string, number>();
-    let feedbackIdx = -1;
-
-    const dfs = (u: string): boolean => {
-      color.set(u, GRAY);
-      for (const idx of adj.get(u) ?? []) {
-        const v = remaining[idx].target;
-        const c = color.get(v) ?? BLACK;
-        if (c === GRAY) {
-          // Cycle found — collect all links in the cycle and pick
-          // the one going furthest backward in node position order.
-          const cycleIndices: number[] = [idx];
-          let cur = u;
-          while (cur !== v) {
-            const pIdx = parentLink.get(cur)!;
-            cycleIndices.push(pIdx);
-            cur = remaining[pIdx].source;
-          }
-
-          // For each link compute "backward distance":
-          // sourcePos − targetPos.  The highest value is the most
-          // backward link.  Break ties by smallest link value.
-          let bestDist = -Infinity;
-          let bestValue = Infinity;
-          for (const ci of cycleIndices) {
-            const l = remaining[ci];
-            const dist = (nodePos.get(l.source) ?? 0) - (nodePos.get(l.target) ?? 0);
-            if (dist > bestDist || (dist === bestDist && l.value < bestValue)) {
-              bestDist = dist;
-              bestValue = l.value;
-              feedbackIdx = ci;
-            }
-          }
-          return true;
-        }
-        if (c === WHITE) {
-          parentLink.set(v, idx);
-          if (dfs(v)) return true;
-        }
-      }
-      color.set(u, BLACK);
-      return false;
-    };
-
-    let found = false;
-    for (const node of color.keys()) {
-      if (color.get(node) === WHITE) {
-        if (dfs(node)) { found = true; break; }
-      }
-    }
-    if (!found || feedbackIdx < 0) break;
+    const feedbackIdx = findCycleFeedback(remaining, nodePos);
+    if (feedbackIdx < 0) break;
 
     // Duplicate the feedback link's target node so all links are
     // preserved as normal Sankey paths (no links are ever removed).
@@ -863,6 +917,7 @@ export class Visual implements IVisual {
   // Interaction state
   private allowInteractions: boolean = true;
   private readonly instanceId: string;
+  private readonly abortController = new AbortController();
 
   constructor(options?: VisualConstructorOptions) {
     if (!options) {
@@ -890,6 +945,13 @@ export class Visual implements IVisual {
       .attr('role', 'img')
       .attr('aria-label', 'Sankey Chart');
 
+    // Allow clicking empty space to clear selection (only if interactions allowed)
+    this.svg.on('click', () => {
+      if (this.allowInteractions) {
+        this.selectionManager.clear();
+      }
+    });
+
     // Setup keyboard navigation
     this.setupKeyboardNavigation();
 
@@ -906,6 +968,8 @@ export class Visual implements IVisual {
    * Setup keyboard navigation handlers
    */
   private setupKeyboardNavigation(): void {
+    const signal = this.abortController.signal;
+
     this.target.addEventListener('keydown', (event: KeyboardEvent) => {
       if (this.currentNodes.length === 0) return;
 
@@ -973,18 +1037,18 @@ export class Visual implements IVisual {
           event.preventDefault();
           break;
       }
-    });
+    }, { signal });
 
     this.target.addEventListener('focus', () => {
       if (this.focusedNodeIndex === -1 && this.currentNodes.length > 0) {
         this.focusedNodeIndex = 0;
         this.updateNodeFocus();
       }
-    });
+    }, { signal });
 
     this.target.addEventListener('blur', () => {
       this.clearNodeFocus();
-    });
+    }, { signal });
   }
 
   /**
@@ -1000,9 +1064,27 @@ export class Visual implements IVisual {
         .filter((_: unknown, i: number) => i === this.focusedNodeIndex)
         .select('rect')
         .attr('stroke', this.hcForegroundSelected('#0078d4'))
-        .attr('stroke-width', 2)
-        .attr('stroke-dasharray', '4,2')
+        .attr('stroke-width', FOCUS_STROKE_WIDTH)
+        .attr('stroke-dasharray', FOCUS_DASH_ARRAY)
         .classed('focused', true);
+
+      const node = this.currentNodes[this.focusedNodeIndex];
+      const rect = this.svg.select('.nodes g:nth-child(' + (this.focusedNodeIndex + 1) + ') rect').node() as SVGRectElement | null;
+      if (rect) {
+        const bbox = rect.getBoundingClientRect();
+        const tooltipData: VisualTooltipDataItem[] = [
+          { displayName: this.getLocalizedString('Visual_Tooltip_Node', 'Node'), value: node.name },
+          { displayName: this.valueMeasureName, value: this.getValueFormatter().format(node.value ?? 0) },
+        ];
+        this.tooltipService.show({
+          dataItems: tooltipData,
+          identities: [],
+          coordinates: [bbox.left + bbox.width / 2, bbox.top],
+          isTouchEvent: false,
+        });
+      }
+    } else {
+      this.tooltipService.hide({ immediately: true, isTouchEvent: false });
     }
   }
 
@@ -1053,32 +1135,32 @@ export class Visual implements IVisual {
     // Update node opacity based on selection
     this.svg.selectAll('.nodes g rect')
       .style('opacity', (d: unknown) => {
-        if (!hasSelection) return 1;
+        if (!hasSelection) return SELECTED_OPACITY;
         const node = d as ComputedNode;
-        return node.selectionId && isSelected(node.selectionId) ? 1 : 0.3;
+        return node.selectionId && isSelected(node.selectionId) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
       });
 
     // Update link opacity based on selection
     this.svg.selectAll('.links path')
       .style('opacity', (d: unknown) => {
-        if (!hasSelection) return 1;
+        if (!hasSelection) return SELECTED_OPACITY;
         const link = d as ComputedLink;
-        const linkSelectionIds = (link as unknown as SankeyLinkDatum).selectionIds ?? [];
-        return linkSelectionIds.some(lid => isSelected(lid)) ? 1 : 0.2;
+        const linkSelectionIds = linkDatum(link).selectionIds ?? [];
+        return linkSelectionIds.some(lid => isSelected(lid)) ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY;
       })
       .attr('stroke-opacity', (d: unknown) => {
-        if (!hasSelection) return this.isHighContrastMode ? 0.8 : linkOpacity;
+        if (!hasSelection) return this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : linkOpacity;
         const link = d as ComputedLink;
-        const linkSelectionIds = (link as unknown as SankeyLinkDatum).selectionIds ?? [];
-        return linkSelectionIds.some(lid => isSelected(lid)) ? 0.8 : 0.2;
+        const linkSelectionIds = linkDatum(link).selectionIds ?? [];
+        return linkSelectionIds.some(lid => isSelected(lid)) ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY;
       });
 
     // Update label opacity
     this.svg.selectAll('.nodes g text')
       .style('opacity', (d: unknown) => {
-        if (!hasSelection) return 1;
+        if (!hasSelection) return SELECTED_OPACITY;
         const node = d as ComputedNode;
-        return node.selectionId && isSelected(node.selectionId) ? 1 : 0.3;
+        return node.selectionId && isSelected(node.selectionId) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
       });
   }
 
@@ -1327,6 +1409,7 @@ export class Visual implements IVisual {
         this.currentNodeLayerDepths = [];
         this.currentLabelLayerDepths = [];
         this.focusedNodeIndex = -1;
+        this.svg.attr('aria-label', 'Sankey Chart: No data');
         this.showLandingPage(viewport);
         this.target.style.pointerEvents = 'none';
         this.target.removeAttribute('tabindex');
@@ -1403,6 +1486,7 @@ export class Visual implements IVisual {
 
     // Store nodes for keyboard navigation; clamp stale focus index
     this.currentNodes = graph.nodes;
+    this.svg.attr('aria-label', `Sankey Chart: ${graph.nodes.length} nodes, ${graph.links.length} flows`);
     if (this.focusedNodeIndex >= graph.nodes.length) {
       this.focusedNodeIndex = graph.nodes.length - 1;
     }
@@ -1508,7 +1592,7 @@ export class Visual implements IVisual {
       }
     };
 
-    const finalOpacity = this.isHighContrastMode ? 0.8 : linkOpacity;
+    const finalOpacity = this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : linkOpacity;
 
     container.append('g')
       .classed('links', true)
@@ -1525,7 +1609,7 @@ export class Visual implements IVisual {
       .on('click', (event: MouseEvent, d: ComputedLink) => {
         // Handle click selection for links (only if interactions allowed)
         if (!this.allowInteractions) return;
-        const linkData = d as unknown as SankeyLinkDatum;
+        const linkData = linkDatum(d);
         const selectionIds = linkData.selectionIds ?? [];
         if (selectionIds.length > 0) {
           selectionManager.select(selectionIds, event.ctrlKey || event.metaKey);
@@ -1535,7 +1619,7 @@ export class Visual implements IVisual {
       .on('contextmenu', (event: MouseEvent, d: ComputedLink) => {
         // Show context menu for links (only if interactions allowed)
         if (!this.allowInteractions) return;
-        const linkData = d as unknown as SankeyLinkDatum;
+        const linkData = linkDatum(d);
         const selectionIds = linkData.selectionIds ?? [];
         if (selectionIds.length > 0) {
           selectionManager.showContextMenu(
@@ -1547,7 +1631,7 @@ export class Visual implements IVisual {
         event.stopPropagation();
       })
       .on('mouseover', (event: MouseEvent, d: ComputedLink) => {
-        select(event.currentTarget as SVGPathElement).attr('stroke-opacity', 0.8);
+        select(event.currentTarget as SVGPathElement).attr('stroke-opacity', HIGHLIGHTED_LINK_OPACITY);
         const sourceName = resolveNode(d.source).name;
         const targetName = resolveNode(d.target).name;
         const tooltipData: VisualTooltipDataItem[] = [
@@ -1569,7 +1653,7 @@ export class Visual implements IVisual {
         });
       })
       .on('mouseout', (event: MouseEvent) => {
-        select(event.currentTarget as SVGPathElement).attr('stroke-opacity', this.isHighContrastMode ? 0.8 : linkOpacity);
+        select(event.currentTarget as SVGPathElement).attr('stroke-opacity', this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : linkOpacity);
         tooltipService.hide({ immediately: true, isTouchEvent: false });
       });
 
@@ -1577,13 +1661,6 @@ export class Visual implements IVisual {
     if (this.settings.showLinkLabels) {
       this.renderLinkLabels(container, links);
     }
-
-    // Allow clicking empty space to clear selection (only if interactions allowed)
-    this.svg.on('click', () => {
-      if (this.allowInteractions) {
-        selectionManager.clear();
-      }
-    });
   }
 
   private renderLinkLabels(
@@ -1594,11 +1671,8 @@ export class Visual implements IVisual {
     const formatter = this.getValueFormatter();
     const textColor = this.hcForeground('#374151');
     const bgColor = this.hcBackground('rgba(255, 255, 255, 0.85)');
-    const minLinkWidth = 8;
-    const labelPadding = 4;
-
     // Filter links that are wide enough for labels
-    const labelsToRender = links.filter(d => (d.width ?? 0) >= minLinkWidth);
+    const labelsToRender = links.filter(d => (d.width ?? 0) >= MIN_LINK_WIDTH_FOR_LABEL);
 
     const labelGroups = container.append('g')
       .classed('link-labels', true)
@@ -1609,11 +1683,6 @@ export class Visual implements IVisual {
       .style('pointer-events', 'none');
 
     // Pre-compute label positions and formatted text to avoid redundant calls
-    const charWidthRatio = 0.6;
-    const lineHeight = 1.4;
-    const bgRadius = 3;
-    const bgOpacity = 0.9;
-
     const labelDataMap = new Map<ComputedLink, { cx: number; cy: number; text: string; width: number; height: number }>();
     for (const link of labelsToRender) {
       const source = resolveNode(link.source);
@@ -1621,8 +1690,8 @@ export class Visual implements IVisual {
       const cx = ((source.x1 ?? 0) + (target.x0 ?? 0)) / 2;
       const cy = ((link.y0 ?? 0) + (link.y1 ?? 0)) / 2;
       const text = formatter.format(link.value ?? 0);
-      const width = text.length * linkLabelFontSize * charWidthRatio + labelPadding * 2;
-      const height = linkLabelFontSize * lineHeight;
+      const width = text.length * linkLabelFontSize * CHAR_WIDTH_RATIO + LINK_LABEL_PADDING * 2;
+      const height = linkLabelFontSize * TEXT_LINE_HEIGHT;
       labelDataMap.set(link, { cx, cy, text, width, height });
     }
 
@@ -1634,10 +1703,10 @@ export class Visual implements IVisual {
       .attr('y', d => getLabelData(d).cy - getLabelData(d).height / 2)
       .attr('width', d => getLabelData(d).width)
       .attr('height', d => getLabelData(d).height)
-      .attr('rx', bgRadius)
-      .attr('ry', bgRadius)
+      .attr('rx', BG_LABEL_BORDER_RADIUS)
+      .attr('ry', BG_LABEL_BORDER_RADIUS)
       .attr('fill', bgColor)
-      .attr('opacity', bgOpacity);
+      .attr('opacity', BG_LABEL_OPACITY);
 
     // Add text labels
     labelGroups.append('text')
@@ -1672,7 +1741,9 @@ export class Visual implements IVisual {
       .data(nodes)
       .enter()
       .append('g')
-      .style('cursor', 'pointer');
+      .style('cursor', 'pointer')
+      .attr('role', 'button')
+      .attr('aria-label', (d: ComputedNode) => `${d.name}: ${this.getValueFormatter().format(d.value ?? 0)}`);
 
     nodeGroups.append('rect')
       .attr('x', d => d.x0 ?? 0)
@@ -1755,12 +1826,11 @@ export class Visual implements IVisual {
     const useLayerColor = !this.isHighContrastMode && labelColorMode === 'layer';
     const textColor = this.hcForeground(labelColor);
     const midPoint = chartWidth / 2;
-    const labelOffset = LABEL_OFFSET;
 
     nodeGroups.append('text')
       .attr('x', d => {
         const isLeftSide = (d.x0 ?? 0) < midPoint;
-        return isLeftSide ? (d.x1 ?? 0) + labelOffset : (d.x0 ?? 0) - labelOffset;
+        return isLeftSide ? (d.x1 ?? 0) + LABEL_OFFSET : (d.x0 ?? 0) - LABEL_OFFSET;
       })
       .attr('y', d => ((d.y0 ?? 0) + (d.y1 ?? 0)) / 2)
       .attr('dy', '0.35em')
@@ -1784,16 +1854,14 @@ export class Visual implements IVisual {
     const { dataLabelFontSize, dataLabelColor, dataLabelFontFamily, dataLabelDisplayMode, percentDecimalPlaces } = this.settings;
     const textColor = this.hcForeground(dataLabelColor);
     const midPoint = chartWidth / 2;
-    const labelOffset = LABEL_OFFSET;
-    const showLabels = this.settings.showLabels;
     // If name labels are also shown, offset the data label below
-    const dyValue = showLabels ? '1.5em' : '0.35em';
+    const dyValue = this.settings.showLabels ? '1.5em' : '0.35em';
     const formatter = this.getValueFormatter();
 
     nodeGroups.append('text')
       .attr('x', d => {
         const isLeftSide = (d.x0 ?? 0) < midPoint;
-        return isLeftSide ? (d.x1 ?? 0) + labelOffset : (d.x0 ?? 0) - labelOffset;
+        return isLeftSide ? (d.x1 ?? 0) + LABEL_OFFSET : (d.x0 ?? 0) - LABEL_OFFSET;
       })
       .attr('y', d => ((d.y0 ?? 0) + (d.y1 ?? 0)) / 2)
       .attr('dy', dyValue)
@@ -1833,7 +1901,8 @@ export class Visual implements IVisual {
       .attr('class', 'landing-page')
       .attr('transform', `translate(${centerX}, ${centerY})`);
 
-    // Sankey diagram icon (simplified flow diagram)
+    // Sankey diagram icon — hardcoded coordinates form a simplified flow
+    // diagram centered at (0, 0) within this group
     const iconGroup = landingGroup.append('g')
       .attr('transform', 'translate(0, -60)');
 
@@ -1907,8 +1976,8 @@ export class Visual implements IVisual {
 
   public destroy(): void {
     // Power BI calls this when the visual is removed.
-    // DOM event listeners on this.target are cleaned up by Power BI when
-    // the element is removed from the DOM, but we clear references to help GC.
+    // Abort all event listeners registered via setupKeyboardNavigation.
+    this.abortController.abort();
     this.svg.selectAll('*').remove();
     this.currentNodes = [];
     this.currentLayerDepths = [];

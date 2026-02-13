@@ -22,6 +22,9 @@ vi.mock('powerbi-visuals-utils-formattingutils', () => ({
 }));
 
 import {
+  extractNumber,
+  extractBoolean,
+  extractString,
   extractDropdownValue,
   extractFillColor,
   extractValidatedDropdown,
@@ -47,6 +50,73 @@ import type {
   SankeyNodeDatum,
   SankeyLinkDatum,
 } from './visual';
+
+// ---------------------------------------------------------------------------
+// extractNumber
+// ---------------------------------------------------------------------------
+
+describe('extractNumber', () => {
+  it('returns number when input is a number', () => {
+    expect(extractNumber(42, 0)).toBe(42);
+  });
+  it('returns default for string input', () => {
+    expect(extractNumber('hello', 10)).toBe(10);
+  });
+  it('returns default for undefined', () => {
+    expect(extractNumber(undefined, 5)).toBe(5);
+  });
+  it('returns default for null', () => {
+    expect(extractNumber(null, 7)).toBe(7);
+  });
+  it('returns default for boolean input', () => {
+    expect(extractNumber(true, 3)).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractBoolean
+// ---------------------------------------------------------------------------
+
+describe('extractBoolean', () => {
+  it('returns boolean when input is a boolean', () => {
+    expect(extractBoolean(true, false)).toBe(true);
+    expect(extractBoolean(false, true)).toBe(false);
+  });
+  it('returns default for string input', () => {
+    expect(extractBoolean('true', false)).toBe(false);
+  });
+  it('returns default for undefined', () => {
+    expect(extractBoolean(undefined, true)).toBe(true);
+  });
+  it('returns default for null', () => {
+    expect(extractBoolean(null, false)).toBe(false);
+  });
+  it('returns default for number input', () => {
+    expect(extractBoolean(1, false)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractString
+// ---------------------------------------------------------------------------
+
+describe('extractString', () => {
+  it('returns string when input is a string', () => {
+    expect(extractString('hello', 'default')).toBe('hello');
+  });
+  it('returns default for number input', () => {
+    expect(extractString(42, 'fallback')).toBe('fallback');
+  });
+  it('returns default for undefined', () => {
+    expect(extractString(undefined, 'fallback')).toBe('fallback');
+  });
+  it('returns default for null', () => {
+    expect(extractString(null, 'fallback')).toBe('fallback');
+  });
+  it('returns default for boolean input', () => {
+    expect(extractString(true, 'fallback')).toBe('fallback');
+  });
+});
 
 // ---------------------------------------------------------------------------
 // extractDropdownValue
