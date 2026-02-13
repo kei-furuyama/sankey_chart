@@ -741,15 +741,22 @@ describe('resolveCycles', () => {
     expect(result.links).toHaveLength(0);
   });
 
-  it('removes the feedback link in a simple A→B→A cycle', () => {
+  it('duplicates target node in a 2-node A→B→A cycle', () => {
     const nodes = [node('A'), node('B')];
     const links = [link('A', 'B', 10), link('B', 'A', 3)];
     const result = resolveCycles(nodes, links);
-    expect(result.nodes).toHaveLength(2);
-    expect(result.links).toHaveLength(1);
-    // B→A goes backward (B pos=1 → A pos=0), so A→B survives
+    // 2-node cycle: B→A feedback is rewritten to B→A' (duplicate)
+    expect(result.nodes).toHaveLength(3);
+    expect(result.links).toHaveLength(2);
+    // A→B preserved
     expect(result.links[0].source).toBe('A');
     expect(result.links[0].target).toBe('B');
+    // B→A' (duplicate of A)
+    const dupeNode = result.nodes.find(n => n.originalId === 'A');
+    expect(dupeNode).toBeDefined();
+    expect(dupeNode!.name).toBe('A');
+    expect(result.links[1].source).toBe('B');
+    expect(result.links[1].target).toBe(dupeNode!.id);
   });
 
   it('removes C→A (feedback) in a 3-node cycle, preserving A→B and B→C', () => {
@@ -783,16 +790,16 @@ describe('resolveCycles', () => {
     expect(links).toEqual(origLinks);
   });
 
-  it('handles multiple independent cycles', () => {
+  it('handles multiple independent 2-node cycles with duplication', () => {
     const nodes = [node('A'), node('B'), node('X'), node('Y')];
     const links = [
       link('A', 'B', 10), link('B', 'A', 2),
       link('X', 'Y', 8), link('Y', 'X', 1),
     ];
     const result = resolveCycles(nodes, links);
-    // Nodes unchanged, two back-edges removed
-    expect(result.nodes).toHaveLength(4);
-    expect(result.links).toHaveLength(2);
+    // Two 2-node cycles: each feedback rewritten with duplicate
+    expect(result.nodes).toHaveLength(6); // A, B, X, Y + A' + X'
+    expect(result.links).toHaveLength(4); // all links preserved
   });
 
   it('preserves non-cyclic links alongside a cycle', () => {
@@ -810,12 +817,14 @@ describe('resolveCycles', () => {
     expect(result.links.find(l => l.source === 'D' && l.target === 'E')).toBeDefined();
   });
 
-  it('handles a cycle where both links have equal value', () => {
+  it('handles a 2-node cycle where both links have equal value', () => {
     const nodes = [node('A'), node('B')];
     const links = [link('A', 'B', 5), link('B', 'A', 5)];
     const result = resolveCycles(nodes, links);
-    // One back-edge removed
-    expect(result.nodes).toHaveLength(2);
-    expect(result.links).toHaveLength(1);
+    // 2-node cycle: feedback rewritten with duplicate
+    expect(result.nodes).toHaveLength(3);
+    expect(result.links).toHaveLength(2);
+    const dupeNode = result.nodes.find(n => n.originalId === 'A');
+    expect(dupeNode).toBeDefined();
   });
 });

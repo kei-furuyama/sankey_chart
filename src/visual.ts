@@ -36,6 +36,7 @@ export interface SankeyNodeDatum {
   name: string;
   color?: string;
   selectionId?: ISelectionId;
+  originalId?: string;
 }
 
 export interface SankeyLinkDatum {
@@ -600,13 +601,22 @@ export function resolveNode(endpoint: string | number | ComputedNode): ComputedN
 // Cycle Resolution
 
 /**
- * Break cycles by removing the link that goes **furthest backward** in
- * the natural flow order.  Each node is assigned a position based on
- * when it first appears as a source in the link list (reflecting the
- * user's data row order).  In each cycle the link whose source position
- * is highest and target position is lowest (i.e. biggest "jump back")
- * is the feedback link and gets removed.  Ties are broken by smallest
- * value.  The inputs are never mutated.
+ * Break cycles in the link graph so that d3-sankey receives a DAG.
+ *
+ * Each node is assigned a position based on when it first appears as a
+ * source in the link list (reflecting the user's data row order).
+ * In each cycle the link whose source position is highest and target
+ * position is lowest (i.e. biggest "jump back") is the feedback link.
+ *
+ * - **3+ node cycles**: the feedback link is simply removed because
+ *   all other links in the cycle remain visible.
+ * - **2-node cycles** (e.g. A→B→A, which arises when the user's
+ *   Source and Target columns contain the same label): removing either
+ *   link would make a flow invisible.  Instead the feedback link's
+ *   target node is **duplicated** (e.g. B→A becomes B→A') so both
+ *   links are preserved as normal Sankey paths.
+ *
+ * Ties are broken by smallest value.  The inputs are never mutated.
  */
 export function resolveCycles(
   nodes: SankeyNodeDatum[],
@@ -626,6 +636,8 @@ export function resolveCycles(
   }
 
   let remaining = links.map(l => ({ ...l }));
+  const newNodes = nodes.map(n => ({ ...n }));
+  let dupeCounter = 0;
 
   for (;;) {
     const adj = new Map<string, number[]>();
@@ -643,7 +655,8 @@ export function resolveCycles(
     }
 
     const parentLink = new Map<string, number>();
-    let removeIdx = -1;
+    let feedbackIdx = -1;
+    let cycleSize = 0;
 
     const dfs = (u: string): boolean => {
       color.set(u, GRAY);
@@ -661,6 +674,14 @@ export function resolveCycles(
             cur = remaining[pIdx].source;
           }
 
+          // Count unique nodes in the cycle
+          const cycleNodes = new Set<string>();
+          for (const ci of cycleIndices) {
+            cycleNodes.add(remaining[ci].source);
+            cycleNodes.add(remaining[ci].target);
+          }
+          cycleSize = cycleNodes.size;
+
           // For each link compute "backward distance":
           // sourcePos − targetPos.  The highest value is the most
           // backward link.  Break ties by smallest link value.
@@ -672,7 +693,7 @@ export function resolveCycles(
             if (dist > bestDist || (dist === bestDist && l.value < bestValue)) {
               bestDist = dist;
               bestValue = l.value;
-              removeIdx = ci;
+              feedbackIdx = ci;
             }
           }
           return true;
@@ -692,12 +713,35 @@ export function resolveCycles(
         if (dfs(node)) { found = true; break; }
       }
     }
-    if (!found || removeIdx < 0) break;
+    if (!found || feedbackIdx < 0) break;
 
-    remaining.splice(removeIdx, 1);
+    if (cycleSize <= 2) {
+      // 2-node cycle: duplicate the feedback link's target so both
+      // links remain visible as normal Sankey paths.
+      const feedbackLink = remaining[feedbackIdx];
+      const targetId = feedbackLink.target;
+      const originalNode = newNodes.find(n => n.id === targetId);
+      if (originalNode) {
+        const dupeId = `${targetId}\0dup${dupeCounter++}`;
+        newNodes.push({
+          ...originalNode,
+          id: dupeId,
+          originalId: originalNode.originalId ?? targetId,
+        });
+        feedbackLink.target = dupeId;
+        // Assign a position to the new node so further iterations work
+        nodePos.set(dupeId, pos++);
+      } else {
+        // Fallback: if node not found, just remove the link
+        remaining.splice(feedbackIdx, 1);
+      }
+    } else {
+      // 3+ node cycle: simply remove the feedback link
+      remaining.splice(feedbackIdx, 1);
+    }
   }
 
-  return { nodes: nodes.map(n => ({ ...n })), links: remaining };
+  return { nodes: newNodes, links: remaining };
 }
 
 // Data Transformer
@@ -1104,7 +1148,9 @@ export class Visual implements IVisual {
 
     // In category mode, add per-node color pickers into Nodes card
     if (this.settings.nodeColorMode === 'category' && this.currentNodes.length > 0) {
-      const nodeColorSlices = this.currentNodes.map(node => ({
+      // Filter out duplicate nodes created by cycle resolution
+      const uniqueNodes = this.currentNodes.filter(n => !n.originalId);
+      const nodeColorSlices = uniqueNodes.map(node => ({
         uid: `nodeColors_fill_${node.id}`,
         displayName: node.name,
         control: {
