@@ -597,6 +597,85 @@ export function resolveNode(endpoint: string | number | ComputedNode): ComputedN
   throw new Error(`Expected resolved ComputedNode but got ${typeof endpoint}`);
 }
 
+// Cycle Detection & Removal
+
+/**
+ * Detect and break cycles in the link list so that d3-sankey can compute
+ * a valid DAG layout.  For each cycle found via DFS, the link with the
+ * smallest value is removed.  The function returns a new array — the
+ * input is never mutated.
+ */
+export function breakCycles(links: SankeyLinkDatum[]): SankeyLinkDatum[] {
+  if (links.length === 0) return links;
+
+  let remaining = [...links];
+
+  // Repeat until no cycles remain (each pass removes at most one link per cycle)
+  for (;;) {
+    // Build adjacency list from current links
+    const adj = new Map<string, SankeyLinkDatum[]>();
+    for (const link of remaining) {
+      let list = adj.get(link.source);
+      if (!list) { list = []; adj.set(link.source, list); }
+      list.push(link);
+    }
+
+    // DFS-based cycle detection
+    const WHITE = 0, GRAY = 1, BLACK = 2;
+    const color = new Map<string, number>();
+    // Collect all node ids
+    for (const link of remaining) {
+      color.set(link.source, WHITE);
+      color.set(link.target, WHITE);
+    }
+
+    let weakestInCycle: SankeyLinkDatum | null = null;
+
+    const parent = new Map<string, SankeyLinkDatum>();
+
+    const dfs = (u: string): boolean => {
+      color.set(u, GRAY);
+      for (const link of adj.get(u) ?? []) {
+        const v = link.target;
+        const c = color.get(v) ?? BLACK;
+        if (c === GRAY) {
+          // Found a cycle — trace back to find the weakest link
+          weakestInCycle = link;
+          let cur = u;
+          while (cur !== v) {
+            const p = parent.get(cur)!;
+            if (p.value < weakestInCycle.value) {
+              weakestInCycle = p;
+            }
+            cur = p.source;
+          }
+          return true;
+        }
+        if (c === WHITE) {
+          parent.set(v, link);
+          if (dfs(v)) return true;
+        }
+      }
+      color.set(u, BLACK);
+      return false;
+    };
+
+    let found = false;
+    for (const node of color.keys()) {
+      if (color.get(node) === WHITE) {
+        if (dfs(node)) { found = true; break; }
+      }
+    }
+
+    if (!found || !weakestInCycle) break;
+
+    // Remove the weakest link
+    remaining = remaining.filter(l => l !== weakestInCycle);
+  }
+
+  return remaining;
+}
+
 // Data Transformer
 
 export function transformDataView(options: TransformDataViewOptions): SankeyData | null {
@@ -1182,6 +1261,17 @@ export class Visual implements IVisual {
         nodeColorMode: this.settings.nodeColorMode,
         nodeDefaultColor: this.settings.nodeDefaultColor,
       });
+      if (data) {
+        // Break cycles so d3-sankey can compute a valid DAG layout
+        const safeLinks = breakCycles(data.links);
+        if (safeLinks.length < data.links.length) {
+          data.links = safeLinks;
+          // Rebuild node list to exclude orphaned nodes
+          const usedNodes = new Set<string>();
+          for (const l of safeLinks) { usedNodes.add(l.source); usedNodes.add(l.target); }
+          data.nodes = data.nodes.filter(n => usedNodes.has(n.id));
+        }
+      }
       if (!data || data.nodes.length === 0) {
         this.currentNodes = [];
         this.currentLayerDepths = [];

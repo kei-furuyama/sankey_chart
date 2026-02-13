@@ -29,6 +29,7 @@ import {
   resolveNode,
   parseSettings,
   transformDataView,
+  breakCycles,
   DEFAULT_SETTINGS,
   VALID_LINK_SORT_MODES,
   VALID_NODE_COLOR_MODES,
@@ -714,5 +715,71 @@ describe('exported constants', () => {
     expect(DEFAULT_SETTINGS.linkOpacity).toBe(0.5);
     expect(DEFAULT_SETTINGS.nodeColorMode).toBe('category');
     expect(DEFAULT_SETTINGS.linkSort).toBe('ascending');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// breakCycles
+// ---------------------------------------------------------------------------
+
+describe('breakCycles', () => {
+  const link = (source: string, target: string, value: number): SankeyLinkDatum =>
+    ({ source, target, value });
+
+  it('returns the same array when there are no cycles', () => {
+    const links = [link('A', 'B', 10), link('B', 'C', 5)];
+    const result = breakCycles(links);
+    expect(result).toHaveLength(2);
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(breakCycles([])).toHaveLength(0);
+  });
+
+  it('breaks a simple A→B→A cycle by removing the smaller link', () => {
+    const links = [link('A', 'B', 10), link('B', 'A', 3)];
+    const result = breakCycles(links);
+    expect(result).toHaveLength(1);
+    expect(result[0].source).toBe('A');
+    expect(result[0].target).toBe('B');
+  });
+
+  it('breaks a 3-node cycle A→B→C→A', () => {
+    const links = [link('A', 'B', 10), link('B', 'C', 5), link('C', 'A', 2)];
+    const result = breakCycles(links);
+    expect(result).toHaveLength(2);
+    // The weakest link (C→A, value=2) should be removed
+    expect(result.find(l => l.source === 'C' && l.target === 'A')).toBeUndefined();
+  });
+
+  it('does not mutate the original array', () => {
+    const links = [link('A', 'B', 10), link('B', 'A', 3)];
+    const original = [...links];
+    breakCycles(links);
+    expect(links).toEqual(original);
+  });
+
+  it('handles multiple independent cycles', () => {
+    const links = [
+      link('A', 'B', 10), link('B', 'A', 2),
+      link('X', 'Y', 8), link('Y', 'X', 1),
+    ];
+    const result = breakCycles(links);
+    expect(result).toHaveLength(2);
+    // Both weak links removed
+    expect(result.find(l => l.source === 'B' && l.target === 'A')).toBeUndefined();
+    expect(result.find(l => l.source === 'Y' && l.target === 'X')).toBeUndefined();
+  });
+
+  it('preserves non-cyclic links alongside a cycle', () => {
+    const links = [
+      link('A', 'B', 10),
+      link('B', 'C', 5),
+      link('C', 'A', 2),  // cycle
+      link('D', 'E', 7),  // unrelated
+    ];
+    const result = breakCycles(links);
+    expect(result).toHaveLength(3);
+    expect(result.find(l => l.source === 'D' && l.target === 'E')).toBeDefined();
   });
 });
