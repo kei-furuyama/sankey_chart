@@ -35,6 +35,7 @@ export interface SankeyNodeDatum {
   id: string;
   name: string;
   color?: string;
+  fixedValue?: number;
   selectionId?: ISelectionId;
 }
 
@@ -599,16 +600,22 @@ export function resolveNode(endpoint: string | number | ComputedNode): ComputedN
 
 // Cycle Detection & Removal
 
+export interface BreakCyclesResult {
+  links: SankeyLinkDatum[];
+  removedLinks: SankeyLinkDatum[];
+}
+
 /**
  * Detect and break cycles in the link list so that d3-sankey can compute
  * a valid DAG layout.  For each cycle found via DFS, the link with the
- * smallest value is removed.  The function returns a new array — the
- * input is never mutated.
+ * smallest value is removed.  Returns both the remaining DAG links and
+ * the removed cyclic links.  The input is never mutated.
  */
-export function breakCycles(links: SankeyLinkDatum[]): SankeyLinkDatum[] {
-  if (links.length === 0) return links;
+export function breakCycles(links: SankeyLinkDatum[]): BreakCyclesResult {
+  if (links.length === 0) return { links, removedLinks: [] };
 
   let remaining = [...links];
+  const removed: SankeyLinkDatum[] = [];
 
   // Repeat until no cycles remain (each pass removes at most one link per cycle)
   for (;;) {
@@ -669,11 +676,36 @@ export function breakCycles(links: SankeyLinkDatum[]): SankeyLinkDatum[] {
 
     if (!found || !weakestInCycle) break;
 
-    // Remove the weakest link
+    // Remove the weakest link and track it
+    removed.push(weakestInCycle);
     remaining = remaining.filter(l => l !== weakestInCycle);
   }
 
-  return remaining;
+  return { links: remaining, removedLinks: removed };
+}
+
+/**
+ * Compute the true node value from ALL links (including cyclic ones that
+ * will be removed for layout).  Each node's value is
+ * max(sum of outgoing, sum of incoming) — the same formula d3-sankey uses.
+ * The result is set as `fixedValue` so d3-sankey preserves correct sizing.
+ */
+export function computeFixedNodeValues(
+  nodes: SankeyNodeDatum[],
+  allLinks: SankeyLinkDatum[],
+): void {
+  const outgoing = new Map<string, number>();
+  const incoming = new Map<string, number>();
+  for (const link of allLinks) {
+    outgoing.set(link.source, (outgoing.get(link.source) ?? 0) + link.value);
+    incoming.set(link.target, (incoming.get(link.target) ?? 0) + link.value);
+  }
+  for (const node of nodes) {
+    node.fixedValue = Math.max(
+      outgoing.get(node.id) ?? 0,
+      incoming.get(node.id) ?? 0,
+    );
+  }
 }
 
 // Data Transformer
@@ -1262,9 +1294,11 @@ export class Visual implements IVisual {
         nodeDefaultColor: this.settings.nodeDefaultColor,
       });
       if (data) {
-        // Break cycles so d3-sankey can compute a valid DAG layout.
-        // Only remove links — keep all nodes so cycle-participating nodes stay visible.
-        data.links = breakCycles(data.links);
+        // Compute true node values from ALL links (including cyclic ones)
+        // before removing cycles, so d3-sankey preserves correct node sizing.
+        const { links: dagLinks } = breakCycles(data.links);
+        computeFixedNodeValues(data.nodes, data.links);
+        data.links = dagLinks;
       }
       if (!data || data.nodes.length === 0) {
         this.currentNodes = [];
@@ -1345,16 +1379,6 @@ export class Visual implements IVisual {
       nodes: data.nodes.map(d => ({ ...d })),
       links: data.links.map(d => ({ ...d })),
     });
-
-    // Guarantee a minimum height for nodes that lost all links after cycle
-    // removal (their value becomes 0 and d3-sankey assigns y1 === y0).
-    const MIN_NODE_HEIGHT = 2;
-    for (const node of graph.nodes) {
-      const h = (node.y1 ?? 0) - (node.y0 ?? 0);
-      if (h < MIN_NODE_HEIGHT) {
-        node.y1 = (node.y0 ?? 0) + MIN_NODE_HEIGHT;
-      }
-    }
 
     // Store nodes for keyboard navigation; clamp stale focus index
     this.currentNodes = graph.nodes;
