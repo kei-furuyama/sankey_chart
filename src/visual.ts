@@ -1262,15 +1262,9 @@ export class Visual implements IVisual {
         nodeDefaultColor: this.settings.nodeDefaultColor,
       });
       if (data) {
-        // Break cycles so d3-sankey can compute a valid DAG layout
-        const safeLinks = breakCycles(data.links);
-        if (safeLinks.length < data.links.length) {
-          data.links = safeLinks;
-          // Rebuild node list to exclude orphaned nodes
-          const usedNodes = new Set<string>();
-          for (const l of safeLinks) { usedNodes.add(l.source); usedNodes.add(l.target); }
-          data.nodes = data.nodes.filter(n => usedNodes.has(n.id));
-        }
+        // Break cycles so d3-sankey can compute a valid DAG layout.
+        // Only remove links — keep all nodes so cycle-participating nodes stay visible.
+        data.links = breakCycles(data.links);
       }
       if (!data || data.nodes.length === 0) {
         this.currentNodes = [];
