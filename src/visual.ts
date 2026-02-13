@@ -35,7 +35,7 @@ export interface SankeyNodeDatum {
   id: string;
   name: string;
   color?: string;
-  fixedValue?: number;
+  originalId?: string;
   selectionId?: ISelectionId;
 }
 
@@ -598,68 +598,60 @@ export function resolveNode(endpoint: string | number | ComputedNode): ComputedN
   throw new Error(`Expected resolved ComputedNode but got ${typeof endpoint}`);
 }
 
-// Cycle Detection & Removal
+// Cycle Resolution via Node Duplication
 
-export interface BreakCyclesResult {
+export interface ResolveCyclesResult {
+  nodes: SankeyNodeDatum[];
   links: SankeyLinkDatum[];
-  removedLinks: SankeyLinkDatum[];
 }
 
 /**
- * Detect and break cycles in the link list so that d3-sankey can compute
- * a valid DAG layout.  For each cycle found via DFS, the link with the
- * smallest value is removed.  Returns both the remaining DAG links and
- * the removed cyclic links.  The input is never mutated.
+ * Resolve cycles by duplicating back-edge target nodes so that d3-sankey
+ * receives a clean DAG.  For a cycle A→B→C→A the DFS back-edge C→A is
+ * rewritten to C→A' where A' is a duplicate of A placed in a later
+ * column.  All links remain visible as normal Sankey paths.
+ * The inputs are never mutated.
  */
-export function breakCycles(links: SankeyLinkDatum[]): BreakCyclesResult {
-  if (links.length === 0) return { links, removedLinks: [] };
+export function resolveCycles(
+  nodes: SankeyNodeDatum[],
+  links: SankeyLinkDatum[],
+): ResolveCyclesResult {
+  if (links.length === 0) return { nodes: [...nodes], links: [...links] };
 
-  let remaining = [...links];
-  const removed: SankeyLinkDatum[] = [];
+  const newLinks = links.map(l => ({ ...l }));
+  const newNodes = nodes.map(n => ({ ...n }));
+  const nodeMap = new Map<string, SankeyNodeDatum>();
+  for (const n of newNodes) nodeMap.set(n.id, n);
 
-  // Repeat until no cycles remain (each pass removes at most one link per cycle)
+  // Iteratively find and resolve one cycle at a time (DFS back-edge
+  // detection may miss overlapping cycles in a single pass).
   for (;;) {
-    // Build adjacency list from current links
-    const adj = new Map<string, SankeyLinkDatum[]>();
-    for (const link of remaining) {
-      let list = adj.get(link.source);
-      if (!list) { list = []; adj.set(link.source, list); }
-      list.push(link);
+    const adj = new Map<string, number[]>();
+    for (let i = 0; i < newLinks.length; i++) {
+      let list = adj.get(newLinks[i].source);
+      if (!list) { list = []; adj.set(newLinks[i].source, list); }
+      list.push(i);
     }
 
-    // DFS-based cycle detection
     const WHITE = 0, GRAY = 1, BLACK = 2;
     const color = new Map<string, number>();
-    // Collect all node ids
-    for (const link of remaining) {
+    for (const link of newLinks) {
       color.set(link.source, WHITE);
       color.set(link.target, WHITE);
     }
 
-    let weakestInCycle: SankeyLinkDatum | null = null;
-
-    const parent = new Map<string, SankeyLinkDatum>();
+    let backEdgeIdx = -1;
 
     const dfs = (u: string): boolean => {
       color.set(u, GRAY);
-      for (const link of adj.get(u) ?? []) {
-        const v = link.target;
+      for (const idx of adj.get(u) ?? []) {
+        const v = newLinks[idx].target;
         const c = color.get(v) ?? BLACK;
         if (c === GRAY) {
-          // Found a cycle — trace back to find the weakest link
-          weakestInCycle = link;
-          let cur = u;
-          while (cur !== v) {
-            const p = parent.get(cur)!;
-            if (p.value < weakestInCycle.value) {
-              weakestInCycle = p;
-            }
-            cur = p.source;
-          }
+          backEdgeIdx = idx;
           return true;
         }
         if (c === WHITE) {
-          parent.set(v, link);
           if (dfs(v)) return true;
         }
       }
@@ -673,39 +665,33 @@ export function breakCycles(links: SankeyLinkDatum[]): BreakCyclesResult {
         if (dfs(node)) { found = true; break; }
       }
     }
+    if (!found || backEdgeIdx < 0) break;
 
-    if (!found || !weakestInCycle) break;
+    // Duplicate the target node of the back-edge
+    const backEdge = newLinks[backEdgeIdx];
+    const originalNode = nodeMap.get(backEdge.target);
+    if (!originalNode) break;
 
-    // Remove the weakest link and track it
-    removed.push(weakestInCycle);
-    remaining = remaining.filter(l => l !== weakestInCycle);
+    // Find a unique id for the duplicate
+    let dupIdx = 0;
+    let dupId = `${originalNode.id}\0dup\0${dupIdx}`;
+    while (nodeMap.has(dupId)) { dupIdx++; dupId = `${originalNode.id}\0dup\0${dupIdx}`; }
+
+    const dupNode: SankeyNodeDatum = {
+      id: dupId,
+      name: originalNode.name,
+      originalId: originalNode.originalId ?? originalNode.id,
+      color: originalNode.color,
+      selectionId: originalNode.selectionId,
+    };
+    newNodes.push(dupNode);
+    nodeMap.set(dupId, dupNode);
+
+    // Rewrite the back-edge to point to the duplicate
+    backEdge.target = dupId;
   }
 
-  return { links: remaining, removedLinks: removed };
-}
-
-/**
- * Compute the true node value from ALL links (including cyclic ones that
- * will be removed for layout).  Each node's value is
- * max(sum of outgoing, sum of incoming) — the same formula d3-sankey uses.
- * The result is set as `fixedValue` so d3-sankey preserves correct sizing.
- */
-export function computeFixedNodeValues(
-  nodes: SankeyNodeDatum[],
-  allLinks: SankeyLinkDatum[],
-): void {
-  const outgoing = new Map<string, number>();
-  const incoming = new Map<string, number>();
-  for (const link of allLinks) {
-    outgoing.set(link.source, (outgoing.get(link.source) ?? 0) + link.value);
-    incoming.set(link.target, (incoming.get(link.target) ?? 0) + link.value);
-  }
-  for (const node of nodes) {
-    node.fixedValue = Math.max(
-      outgoing.get(node.id) ?? 0,
-      incoming.get(node.id) ?? 0,
-    );
-  }
+  return { nodes: newNodes, links: newLinks };
 }
 
 // Data Transformer
@@ -1111,8 +1097,9 @@ export class Visual implements IVisual {
       ?? formattingCards.find(c => c.displayName === displayName);
 
     // In category mode, add per-node color pickers into Nodes card
+    // Filter out duplicated cycle nodes to avoid duplicate color pickers
     if (this.settings.nodeColorMode === 'category' && this.currentNodes.length > 0) {
-      const nodeColorSlices = this.currentNodes.map(node => ({
+      const nodeColorSlices = this.currentNodes.filter(n => !n.originalId).map(node => ({
         uid: `nodeColors_fill_${node.id}`,
         displayName: node.name,
         control: {
@@ -1293,14 +1280,12 @@ export class Visual implements IVisual {
         nodeColorMode: this.settings.nodeColorMode,
         nodeDefaultColor: this.settings.nodeDefaultColor,
       });
-      let removedCyclicLinks: SankeyLinkDatum[] = [];
       if (data) {
-        // Compute true node values from ALL links (including cyclic ones)
-        // before removing cycles, so d3-sankey preserves correct node sizing.
-        const { links: dagLinks, removedLinks } = breakCycles(data.links);
-        computeFixedNodeValues(data.nodes, data.links);
-        data.links = dagLinks;
-        removedCyclicLinks = removedLinks;
+        // Resolve cycles by duplicating back-edge target nodes so all
+        // flows are visible as normal Sankey links.
+        const resolved = resolveCycles(data.nodes, data.links);
+        data.nodes = resolved.nodes;
+        data.links = resolved.links;
       }
       if (!data || data.nodes.length === 0) {
         this.currentNodes = [];
@@ -1318,7 +1303,7 @@ export class Visual implements IVisual {
       this.target.style.pointerEvents = '';
       this.target.setAttribute('tabindex', '0');
       this.valueMeasureName = data.valueMeasureName;
-      this.renderSankey(data, viewport, removedCyclicLinks);
+      this.renderSankey(data, viewport);
 
       // Signal rendering finished
       this.eventService.renderingFinished(options);
@@ -1340,7 +1325,7 @@ export class Visual implements IVisual {
     return totals;
   }
 
-  private renderSankey(data: SankeyData, viewport: IViewport, removedCyclicLinks: SankeyLinkDatum[] = []): void {
+  private renderSankey(data: SankeyData, viewport: IViewport): void {
     const margin = {
       top: this.settings.marginTop,
       right: this.settings.marginRight,
@@ -1416,92 +1401,7 @@ export class Visual implements IVisual {
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
     this.renderLinks(g, graph.links);
-    this.renderCyclicLinks(g, graph.nodes, removedCyclicLinks, height);
     this.renderNodes(g, graph.nodes, width, layerTotals);
-  }
-
-  /**
-   * Render removed cyclic links as dashed arcs routed above or below
-   * the main diagram so that feedback flows remain visible.
-   */
-  private renderCyclicLinks(
-    container: Selection<SVGGElement, unknown, null, undefined>,
-    nodes: ComputedNode[],
-    removedLinks: SankeyLinkDatum[],
-    chartHeight: number,
-  ): void {
-    if (removedLinks.length === 0) return;
-
-    const nodeMap = new Map<string, ComputedNode>();
-    for (const node of nodes) nodeMap.set(node.id, node);
-
-    const formatter = this.getValueFormatter();
-    const tooltipService = this.tooltipService;
-    const { linkOpacity } = this.settings;
-    const finalOpacity = this.isHighContrastMode ? 0.8 : linkOpacity;
-
-    const group = container.append('g').classed('cyclic-links', true);
-
-    for (const link of removedLinks) {
-      const sourceNode = nodeMap.get(link.source);
-      const targetNode = nodeMap.get(link.target);
-      if (!sourceNode || !targetNode) continue;
-
-      // Source of the cyclic link is visually to the RIGHT of the target
-      // (because the link goes "backwards").  Draw an arc that goes
-      // below (or above) the chart to connect them.
-      const sx = sourceNode.x0 ?? 0;
-      const sy = ((sourceNode.y0 ?? 0) + (sourceNode.y1 ?? 0)) / 2;
-      const tx = (targetNode.x1 ?? 0);
-      const ty = ((targetNode.y0 ?? 0) + (targetNode.y1 ?? 0)) / 2;
-
-      // Choose whether to route above or below based on node center position
-      const midY = (sy + ty) / 2;
-      const routeBelow = midY < chartHeight / 2;
-      const offset = routeBelow
-        ? Math.max(chartHeight - midY + 20, 40)
-        : -Math.max(midY + 20, 40);
-
-      const linkWidth = Math.max(1, (link.value / (sourceNode.value ?? link.value)) * ((sourceNode.y1 ?? 0) - (sourceNode.y0 ?? 0)));
-
-      const path = `M${sx},${sy} C${sx - 30},${sy + offset} ${tx + 30},${ty + offset} ${tx},${ty}`;
-
-      const sourceColor = sourceNode.color ?? '#aaa';
-      const strokeColor = this.isHighContrastMode ? this.hcForeground('#aaa') : sourceColor;
-
-      group.append('path')
-        .attr('d', path)
-        .attr('fill', 'none')
-        .attr('stroke', strokeColor)
-        .attr('stroke-width', Math.max(1, linkWidth))
-        .attr('stroke-opacity', finalOpacity * 0.6)
-        .attr('stroke-dasharray', '6,4')
-        .style('cursor', 'pointer')
-        .on('mouseover', (event: MouseEvent) => {
-          select(event.currentTarget as SVGPathElement).attr('stroke-opacity', 0.8);
-          const tooltipData: VisualTooltipDataItem[] = [
-            { displayName: this.getLocalizedString('Visual_Tooltip_Flow', 'Flow'), value: `${sourceNode.name} → ${targetNode.name} ↻` },
-            { displayName: this.valueMeasureName, value: formatter.format(link.value) },
-          ];
-          tooltipService.show({
-            dataItems: tooltipData,
-            identities: [],
-            coordinates: [event.clientX, event.clientY],
-            isTouchEvent: false,
-          });
-        })
-        .on('mousemove', (event: MouseEvent) => {
-          tooltipService.move({
-            coordinates: [event.clientX, event.clientY],
-            identities: [],
-            isTouchEvent: false,
-          });
-        })
-        .on('mouseout', (event: MouseEvent) => {
-          select(event.currentTarget as SVGPathElement).attr('stroke-opacity', finalOpacity * 0.6);
-          tooltipService.hide({ immediately: true, isTouchEvent: false });
-        });
-    }
   }
 
   private renderLinks(

@@ -29,8 +29,7 @@ import {
   resolveNode,
   parseSettings,
   transformDataView,
-  breakCycles,
-  computeFixedNodeValues,
+  resolveCycles,
   DEFAULT_SETTINGS,
   VALID_LINK_SORT_MODES,
   VALID_NODE_COLOR_MODES,
@@ -720,127 +719,119 @@ describe('exported constants', () => {
 });
 
 // ---------------------------------------------------------------------------
-// breakCycles
+// resolveCycles
 // ---------------------------------------------------------------------------
 
-describe('breakCycles', () => {
+describe('resolveCycles', () => {
+  const node = (id: string): SankeyNodeDatum => ({ id, name: id });
   const link = (source: string, target: string, value: number): SankeyLinkDatum =>
     ({ source, target, value });
 
-  it('returns the same array when there are no cycles', () => {
+  it('passes through when there are no cycles', () => {
+    const nodes = [node('A'), node('B'), node('C')];
     const links = [link('A', 'B', 10), link('B', 'C', 5)];
-    const { links: result, removedLinks } = breakCycles(links);
-    expect(result).toHaveLength(2);
-    expect(removedLinks).toHaveLength(0);
+    const result = resolveCycles(nodes, links);
+    expect(result.nodes).toHaveLength(3);
+    expect(result.links).toHaveLength(2);
   });
 
-  it('returns empty links for empty input', () => {
-    const { links: result, removedLinks } = breakCycles([]);
-    expect(result).toHaveLength(0);
-    expect(removedLinks).toHaveLength(0);
+  it('returns empty results for empty input', () => {
+    const result = resolveCycles([], []);
+    expect(result.nodes).toHaveLength(0);
+    expect(result.links).toHaveLength(0);
   });
 
-  it('breaks a simple A→B→A cycle by removing the smaller link', () => {
+  it('duplicates target node for a simple A→B→A cycle', () => {
+    const nodes = [node('A'), node('B')];
     const links = [link('A', 'B', 10), link('B', 'A', 3)];
-    const { links: result, removedLinks } = breakCycles(links);
-    expect(result).toHaveLength(1);
-    expect(result[0].source).toBe('A');
-    expect(result[0].target).toBe('B');
-    expect(removedLinks).toHaveLength(1);
-    expect(removedLinks[0].source).toBe('B');
-    expect(removedLinks[0].target).toBe('A');
+    const result = resolveCycles(nodes, links);
+    // One duplicate added
+    expect(result.nodes).toHaveLength(3);
+    // All links preserved (rewritten)
+    expect(result.links).toHaveLength(2);
+    // The duplicate should have the same name as the original
+    const dup = result.nodes.find(n => n.originalId);
+    expect(dup).toBeDefined();
+    expect(dup!.name).toBe('A');
+    expect(dup!.originalId).toBe('A');
+    // The back-edge should target the duplicate
+    const backEdge = result.links.find(l => l.source === 'B');
+    expect(backEdge!.target).toBe(dup!.id);
   });
 
-  it('breaks a 3-node cycle A→B→C→A', () => {
+  it('resolves a 3-node cycle A→B→C→A', () => {
+    const nodes = [node('A'), node('B'), node('C')];
     const links = [link('A', 'B', 10), link('B', 'C', 5), link('C', 'A', 2)];
-    const { links: result } = breakCycles(links);
-    expect(result).toHaveLength(2);
-    // The weakest link (C→A, value=2) should be removed
-    expect(result.find(l => l.source === 'C' && l.target === 'A')).toBeUndefined();
+    const result = resolveCycles(nodes, links);
+    // One duplicate node added
+    expect(result.nodes).toHaveLength(4);
+    // All 3 links preserved
+    expect(result.links).toHaveLength(3);
+    // No cycles remain: verify no link targets an original that also sources
+    const dup = result.nodes.find(n => n.originalId);
+    expect(dup).toBeDefined();
+    // The rewritten back-edge should target the duplicate
+    expect(result.links.find(l => l.target === dup!.id)).toBeDefined();
   });
 
-  it('does not mutate the original array', () => {
+  it('does not mutate the original arrays', () => {
+    const nodes = [node('A'), node('B')];
     const links = [link('A', 'B', 10), link('B', 'A', 3)];
-    const original = [...links];
-    breakCycles(links);
-    expect(links).toEqual(original);
+    const origNodes = [...nodes];
+    const origLinks = links.map(l => ({ ...l }));
+    resolveCycles(nodes, links);
+    expect(nodes).toEqual(origNodes);
+    expect(links).toEqual(origLinks);
   });
 
   it('handles multiple independent cycles', () => {
+    const nodes = [node('A'), node('B'), node('X'), node('Y')];
     const links = [
       link('A', 'B', 10), link('B', 'A', 2),
       link('X', 'Y', 8), link('Y', 'X', 1),
     ];
-    const { links: result, removedLinks } = breakCycles(links);
-    expect(result).toHaveLength(2);
-    expect(removedLinks).toHaveLength(2);
-    // Both weak links removed
-    expect(result.find(l => l.source === 'B' && l.target === 'A')).toBeUndefined();
-    expect(result.find(l => l.source === 'Y' && l.target === 'X')).toBeUndefined();
+    const result = resolveCycles(nodes, links);
+    // Two duplicates
+    expect(result.nodes).toHaveLength(6);
+    // All 4 links preserved
+    expect(result.links).toHaveLength(4);
+    const dups = result.nodes.filter(n => n.originalId);
+    expect(dups).toHaveLength(2);
   });
 
   it('preserves non-cyclic links alongside a cycle', () => {
+    const nodes = [node('A'), node('B'), node('C'), node('D'), node('E')];
     const links = [
       link('A', 'B', 10),
       link('B', 'C', 5),
       link('C', 'A', 2),  // cycle
       link('D', 'E', 7),  // unrelated
     ];
-    const { links: result } = breakCycles(links);
-    expect(result).toHaveLength(3);
-    expect(result.find(l => l.source === 'D' && l.target === 'E')).toBeDefined();
+    const result = resolveCycles(nodes, links);
+    // One duplicate + 5 originals
+    expect(result.nodes).toHaveLength(6);
+    // All 4 links preserved
+    expect(result.links).toHaveLength(4);
+    // D→E unchanged
+    expect(result.links.find(l => l.source === 'D' && l.target === 'E')).toBeDefined();
   });
 
-  it('isolates a node when all its links are cyclic', () => {
-    // A↔B cycle only — after breaking, one node loses all links
-    const links = [link('A', 'B', 5), link('B', 'A', 5)];
-    const { links: result, removedLinks } = breakCycles(links);
-    expect(result.length).toBeLessThan(links.length);
-    expect(removedLinks.length).toBeGreaterThan(0);
-  });
-});
-
-// computeFixedNodeValues
-// ---------------------------------------------------------------------------
-
-describe('computeFixedNodeValues', () => {
-  const node = (id: string): SankeyNodeDatum => ({ id, name: id });
-  const link = (source: string, target: string, value: number): SankeyLinkDatum =>
-    ({ source, target, value });
-
-  it('sets fixedValue to max(outgoing, incoming) for each node', () => {
-    const nodes = [node('A'), node('B'), node('C')];
-    const links = [link('A', 'B', 10), link('B', 'C', 5)];
-    computeFixedNodeValues(nodes, links);
-    expect(nodes[0].fixedValue).toBe(10); // A: out=10, in=0
-    expect(nodes[1].fixedValue).toBe(10); // B: out=5, in=10
-    expect(nodes[2].fixedValue).toBe(5);  // C: out=0, in=5
+  it('copies color and selectionId to duplicated nodes', () => {
+    const orig = node('A');
+    orig.color = '#ff0000';
+    const nodes = [orig, node('B')];
+    const links = [link('A', 'B', 10), link('B', 'A', 3)];
+    const result = resolveCycles(nodes, links);
+    const dup = result.nodes.find(n => n.originalId === 'A');
+    expect(dup!.color).toBe('#ff0000');
   });
 
-  it('includes cyclic link values in the computation', () => {
+  it('handles a cycle where both links have equal value', () => {
     const nodes = [node('A'), node('B')];
-    const allLinks = [link('A', 'B', 10), link('B', 'A', 3)];
-    computeFixedNodeValues(nodes, allLinks);
-    // A: out=10, in=3 → 10
-    expect(nodes[0].fixedValue).toBe(10);
-    // B: out=3, in=10 → 10
-    expect(nodes[1].fixedValue).toBe(10);
-  });
-
-  it('handles nodes with no links', () => {
-    const nodes = [node('A'), node('orphan')];
-    const links = [link('A', 'A', 5)]; // self-loop only on A
-    computeFixedNodeValues(nodes, links);
-    expect(nodes[0].fixedValue).toBe(5);
-    expect(nodes[1].fixedValue).toBe(0);
-  });
-
-  it('sums multiple links per node', () => {
-    const nodes = [node('A'), node('B'), node('C')];
-    const links = [link('A', 'B', 4), link('A', 'C', 6), link('B', 'C', 3)];
-    computeFixedNodeValues(nodes, links);
-    expect(nodes[0].fixedValue).toBe(10); // A: out=10, in=0
-    expect(nodes[1].fixedValue).toBe(4);  // B: out=3, in=4
-    expect(nodes[2].fixedValue).toBe(9);  // C: out=0, in=9
+    const links = [link('A', 'B', 5), link('B', 'A', 5)];
+    const result = resolveCycles(nodes, links);
+    // One duplicate, all links preserved
+    expect(result.nodes).toHaveLength(3);
+    expect(result.links).toHaveLength(2);
   });
 });
