@@ -741,34 +741,34 @@ describe('resolveCycles', () => {
     expect(result.links).toHaveLength(0);
   });
 
-  it('removes the weakest link in a simple A→B→A cycle', () => {
+  it('removes the feedback link in a simple A→B→A cycle', () => {
     const nodes = [node('A'), node('B')];
     const links = [link('A', 'B', 10), link('B', 'A', 3)];
     const result = resolveCycles(nodes, links);
     expect(result.nodes).toHaveLength(2);
     expect(result.links).toHaveLength(1);
-    // B→A (value=3) is weaker than A→B (value=10), so A→B survives
+    // B→A goes backward (B pos=1 → A pos=0), so A→B survives
     expect(result.links[0].source).toBe('A');
     expect(result.links[0].target).toBe('B');
   });
 
-  it('removes the weakest link in a 3-node cycle A→B→C→A', () => {
+  it('removes C→A (feedback) in a 3-node cycle, preserving A→B and B→C', () => {
     const nodes = [node('A'), node('B'), node('C')];
     const links = [link('A', 'B', 10), link('B', 'C', 5), link('C', 'A', 2)];
     const result = resolveCycles(nodes, links);
     expect(result.nodes).toHaveLength(3);
-    // C→A (value=2) is weakest — both forward links preserved
     expect(result.links).toHaveLength(2);
     expect(result.links.find(l => l.source === 'A' && l.target === 'B')).toBeDefined();
     expect(result.links.find(l => l.source === 'B' && l.target === 'C')).toBeDefined();
   });
 
-  it('removes weakest link regardless of link order in input', () => {
+  it('removes feedback link even when it is NOT the weakest', () => {
     const nodes = [node('A'), node('B'), node('C')];
-    // Links in reverse order — DFS starts at B, but C→A (weakest) should still be removed
-    const links = [link('B', 'C', 5), link('C', 'A', 2), link('A', 'B', 10)];
+    // B→C (value=2) is weakest, but C→A is the feedback (goes backward)
+    const links = [link('A', 'B', 10), link('B', 'C', 2), link('C', 'A', 5)];
     const result = resolveCycles(nodes, links);
     expect(result.links).toHaveLength(2);
+    // A→B and B→C preserved, C→A removed
     expect(result.links.find(l => l.source === 'A' && l.target === 'B')).toBeDefined();
     expect(result.links.find(l => l.source === 'B' && l.target === 'C')).toBeDefined();
   });

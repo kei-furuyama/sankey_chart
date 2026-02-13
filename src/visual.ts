@@ -600,11 +600,13 @@ export function resolveNode(endpoint: string | number | ComputedNode): ComputedN
 // Cycle Resolution
 
 /**
- * Break cycles by removing the **weakest** link (smallest value) in each
- * cycle so d3-sankey receives a clean DAG.  DFS detects a back-edge,
- * then the full cycle is traced to find the link with the minimum value.
- * This ensures high-value forward links are never removed regardless of
- * DFS traversal order.  The inputs are never mutated.
+ * Break cycles by removing the link that goes **furthest backward** in
+ * the natural flow order.  Each node is assigned a position based on
+ * when it first appears as a source in the link list (reflecting the
+ * user's data row order).  In each cycle the link whose source position
+ * is highest and target position is lowest (i.e. biggest "jump back")
+ * is the feedback link and gets removed.  Ties are broken by smallest
+ * value.  The inputs are never mutated.
  */
 export function resolveCycles(
   nodes: SankeyNodeDatum[],
@@ -612,11 +614,20 @@ export function resolveCycles(
 ): { nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } {
   if (links.length === 0) return { nodes: [...nodes], links: [...links] };
 
+  // Assign node positions by first appearance as source in the original
+  // link order — this reflects the user's intended flow direction.
+  const nodePos = new Map<string, number>();
+  let pos = 0;
+  for (const link of links) {
+    if (!nodePos.has(link.source)) nodePos.set(link.source, pos++);
+  }
+  for (const link of links) {
+    if (!nodePos.has(link.target)) nodePos.set(link.target, pos++);
+  }
+
   let remaining = links.map(l => ({ ...l }));
 
-  // Iteratively find and remove the weakest link in each cycle.
   for (;;) {
-    // Build adjacency: node → list of link indices
     const adj = new Map<string, number[]>();
     for (let i = 0; i < remaining.length; i++) {
       let list = adj.get(remaining[i].source);
@@ -631,9 +642,8 @@ export function resolveCycles(
       color.set(link.target, WHITE);
     }
 
-    // Track the link used to reach each node (DFS tree edge)
     const parentLink = new Map<string, number>();
-    let weakestIdx = -1;
+    let removeIdx = -1;
 
     const dfs = (u: string): boolean => {
       color.set(u, GRAY);
@@ -641,15 +651,29 @@ export function resolveCycles(
         const v = remaining[idx].target;
         const c = color.get(v) ?? BLACK;
         if (c === GRAY) {
-          // Cycle found — trace back from u to v to find the weakest link
-          weakestIdx = idx; // start with the back-edge itself
+          // Cycle found — collect all links in the cycle and pick
+          // the one going furthest backward in node position order.
+          const cycleIndices: number[] = [idx];
           let cur = u;
           while (cur !== v) {
             const pIdx = parentLink.get(cur)!;
-            if (remaining[pIdx].value < remaining[weakestIdx].value) {
-              weakestIdx = pIdx;
-            }
+            cycleIndices.push(pIdx);
             cur = remaining[pIdx].source;
+          }
+
+          // For each link compute "backward distance":
+          // sourcePos − targetPos.  The highest value is the most
+          // backward link.  Break ties by smallest link value.
+          let bestDist = -Infinity;
+          let bestValue = Infinity;
+          for (const ci of cycleIndices) {
+            const l = remaining[ci];
+            const dist = (nodePos.get(l.source) ?? 0) - (nodePos.get(l.target) ?? 0);
+            if (dist > bestDist || (dist === bestDist && l.value < bestValue)) {
+              bestDist = dist;
+              bestValue = l.value;
+              removeIdx = ci;
+            }
           }
           return true;
         }
@@ -668,10 +692,9 @@ export function resolveCycles(
         if (dfs(node)) { found = true; break; }
       }
     }
-    if (!found || weakestIdx < 0) break;
+    if (!found || removeIdx < 0) break;
 
-    // Remove the weakest link in the cycle
-    remaining.splice(weakestIdx, 1);
+    remaining.splice(removeIdx, 1);
   }
 
   return { nodes: nodes.map(n => ({ ...n })), links: remaining };
