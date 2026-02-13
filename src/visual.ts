@@ -608,13 +608,10 @@ export function resolveNode(endpoint: string | number | ComputedNode): ComputedN
  * In each cycle the link whose source position is highest and target
  * position is lowest (i.e. biggest "jump back") is the feedback link.
  *
- * - **3+ node cycles**: the feedback link is simply removed because
- *   all other links in the cycle remain visible.
- * - **2-node cycles** (e.g. A→B→A, which arises when the user's
- *   Source and Target columns contain the same label): removing either
- *   link would make a flow invisible.  Instead the feedback link's
- *   target node is **duplicated** (e.g. B→A becomes B→A') so both
- *   links are preserved as normal Sankey paths.
+ * The feedback link's target node is **duplicated** (e.g. C→A becomes
+ * C→A') so all links are preserved as normal Sankey paths.  No links
+ * are ever removed — this avoids the problem where a heuristic picks
+ * the wrong link to delete.
  *
  * Ties are broken by smallest value.  The inputs are never mutated.
  */
@@ -635,7 +632,7 @@ export function resolveCycles(
     if (!nodePos.has(link.target)) nodePos.set(link.target, pos++);
   }
 
-  let remaining = links.map(l => ({ ...l }));
+  const remaining = links.map(l => ({ ...l }));
   const newNodes = nodes.map(n => ({ ...n }));
   let dupeCounter = 0;
 
@@ -656,7 +653,6 @@ export function resolveCycles(
 
     const parentLink = new Map<string, number>();
     let feedbackIdx = -1;
-    let cycleSize = 0;
 
     const dfs = (u: string): boolean => {
       color.set(u, GRAY);
@@ -673,14 +669,6 @@ export function resolveCycles(
             cycleIndices.push(pIdx);
             cur = remaining[pIdx].source;
           }
-
-          // Count unique nodes in the cycle
-          const cycleNodes = new Set<string>();
-          for (const ci of cycleIndices) {
-            cycleNodes.add(remaining[ci].source);
-            cycleNodes.add(remaining[ci].target);
-          }
-          cycleSize = cycleNodes.size;
 
           // For each link compute "backward distance":
           // sourcePos − targetPos.  The highest value is the most
@@ -715,28 +703,23 @@ export function resolveCycles(
     }
     if (!found || feedbackIdx < 0) break;
 
-    if (cycleSize <= 2) {
-      // 2-node cycle: duplicate the feedback link's target so both
-      // links remain visible as normal Sankey paths.
-      const feedbackLink = remaining[feedbackIdx];
-      const targetId = feedbackLink.target;
-      const originalNode = newNodes.find(n => n.id === targetId);
-      if (originalNode) {
-        const dupeId = `${targetId}\0dup${dupeCounter++}`;
-        newNodes.push({
-          ...originalNode,
-          id: dupeId,
-          originalId: originalNode.originalId ?? targetId,
-        });
-        feedbackLink.target = dupeId;
-        // Assign a position to the new node so further iterations work
-        nodePos.set(dupeId, pos++);
-      } else {
-        // Fallback: if node not found, just remove the link
-        remaining.splice(feedbackIdx, 1);
-      }
+    // Duplicate the feedback link's target node so all links are
+    // preserved as normal Sankey paths (no links are ever removed).
+    const feedbackLink = remaining[feedbackIdx];
+    const targetId = feedbackLink.target;
+    const originalNode = newNodes.find(n => n.id === targetId);
+    if (originalNode) {
+      const dupeId = `${targetId}\0dup${dupeCounter++}`;
+      newNodes.push({
+        ...originalNode,
+        id: dupeId,
+        originalId: originalNode.originalId ?? targetId,
+      });
+      feedbackLink.target = dupeId;
+      // Assign a position to the new node so further iterations work
+      nodePos.set(dupeId, pos++);
     } else {
-      // 3+ node cycle: simply remove the feedback link
+      // Fallback: remove the link if the target node is missing
       remaining.splice(feedbackIdx, 1);
     }
   }

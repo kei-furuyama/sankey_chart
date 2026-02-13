@@ -759,25 +759,31 @@ describe('resolveCycles', () => {
     expect(result.links[1].target).toBe(dupeNode!.id);
   });
 
-  it('removes C→A (feedback) in a 3-node cycle, preserving A→B and B→C', () => {
+  it('duplicates target in a 3-node cycle, preserving all links', () => {
     const nodes = [node('A'), node('B'), node('C')];
     const links = [link('A', 'B', 10), link('B', 'C', 5), link('C', 'A', 2)];
     const result = resolveCycles(nodes, links);
-    expect(result.nodes).toHaveLength(3);
-    expect(result.links).toHaveLength(2);
+    // C→A feedback rewritten to C→A', all 3 links preserved
+    expect(result.nodes).toHaveLength(4); // A, B, C + A'
+    expect(result.links).toHaveLength(3);
     expect(result.links.find(l => l.source === 'A' && l.target === 'B')).toBeDefined();
     expect(result.links.find(l => l.source === 'B' && l.target === 'C')).toBeDefined();
+    const dupeNode = result.nodes.find(n => n.originalId === 'A');
+    expect(dupeNode).toBeDefined();
+    expect(result.links.find(l => l.source === 'C' && l.target === dupeNode!.id)).toBeDefined();
   });
 
-  it('removes feedback link even when it is NOT the weakest', () => {
+  it('duplicates feedback target even when it is NOT the weakest link', () => {
     const nodes = [node('A'), node('B'), node('C')];
     // B→C (value=2) is weakest, but C→A is the feedback (goes backward)
     const links = [link('A', 'B', 10), link('B', 'C', 2), link('C', 'A', 5)];
     const result = resolveCycles(nodes, links);
-    expect(result.links).toHaveLength(2);
-    // A→B and B→C preserved, C→A removed
+    // All 3 links preserved via duplication
+    expect(result.links).toHaveLength(3);
     expect(result.links.find(l => l.source === 'A' && l.target === 'B')).toBeDefined();
     expect(result.links.find(l => l.source === 'B' && l.target === 'C')).toBeDefined();
+    const dupeNode = result.nodes.find(n => n.originalId === 'A');
+    expect(dupeNode).toBeDefined();
   });
 
   it('does not mutate the original arrays', () => {
@@ -811,9 +817,9 @@ describe('resolveCycles', () => {
       link('D', 'E', 7),  // unrelated
     ];
     const result = resolveCycles(nodes, links);
-    // All nodes preserved, one back-edge removed
-    expect(result.nodes).toHaveLength(5);
-    expect(result.links).toHaveLength(3);
+    // All links preserved, one duplicate node added
+    expect(result.nodes).toHaveLength(6); // A, B, C, D, E + A'
+    expect(result.links).toHaveLength(4); // all links preserved
     expect(result.links.find(l => l.source === 'D' && l.target === 'E')).toBeDefined();
   });
 
