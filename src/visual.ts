@@ -35,7 +35,6 @@ export interface SankeyNodeDatum {
   id: string;
   name: string;
   color?: string;
-  originalId?: string;
   selectionId?: ISelectionId;
 }
 
@@ -598,44 +597,33 @@ export function resolveNode(endpoint: string | number | ComputedNode): ComputedN
   throw new Error(`Expected resolved ComputedNode but got ${typeof endpoint}`);
 }
 
-// Cycle Resolution via Node Duplication
-
-export interface ResolveCyclesResult {
-  nodes: SankeyNodeDatum[];
-  links: SankeyLinkDatum[];
-}
+// Cycle Resolution
 
 /**
- * Resolve cycles by duplicating back-edge target nodes so that d3-sankey
- * receives a clean DAG.  For a cycle A→B→C→A the DFS back-edge C→A is
- * rewritten to C→A' where A' is a duplicate of A placed in a later
- * column.  All links remain visible as normal Sankey paths.
- * The inputs are never mutated.
+ * Remove DFS back-edges to break cycles so d3-sankey receives a clean
+ * DAG.  Forward links and all nodes are preserved — only the back-edge
+ * that closes each cycle is dropped.  The inputs are never mutated.
  */
 export function resolveCycles(
   nodes: SankeyNodeDatum[],
   links: SankeyLinkDatum[],
-): ResolveCyclesResult {
+): { nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } {
   if (links.length === 0) return { nodes: [...nodes], links: [...links] };
 
-  const newLinks = links.map(l => ({ ...l }));
-  const newNodes = nodes.map(n => ({ ...n }));
-  const nodeMap = new Map<string, SankeyNodeDatum>();
-  for (const n of newNodes) nodeMap.set(n.id, n);
+  let remaining = links.map(l => ({ ...l }));
 
-  // Iteratively find and resolve one cycle at a time (DFS back-edge
-  // detection may miss overlapping cycles in a single pass).
+  // Iteratively find and remove one back-edge at a time.
   for (;;) {
     const adj = new Map<string, number[]>();
-    for (let i = 0; i < newLinks.length; i++) {
-      let list = adj.get(newLinks[i].source);
-      if (!list) { list = []; adj.set(newLinks[i].source, list); }
+    for (let i = 0; i < remaining.length; i++) {
+      let list = adj.get(remaining[i].source);
+      if (!list) { list = []; adj.set(remaining[i].source, list); }
       list.push(i);
     }
 
     const WHITE = 0, GRAY = 1, BLACK = 2;
     const color = new Map<string, number>();
-    for (const link of newLinks) {
+    for (const link of remaining) {
       color.set(link.source, WHITE);
       color.set(link.target, WHITE);
     }
@@ -645,7 +633,7 @@ export function resolveCycles(
     const dfs = (u: string): boolean => {
       color.set(u, GRAY);
       for (const idx of adj.get(u) ?? []) {
-        const v = newLinks[idx].target;
+        const v = remaining[idx].target;
         const c = color.get(v) ?? BLACK;
         if (c === GRAY) {
           backEdgeIdx = idx;
@@ -667,31 +655,11 @@ export function resolveCycles(
     }
     if (!found || backEdgeIdx < 0) break;
 
-    // Duplicate the target node of the back-edge
-    const backEdge = newLinks[backEdgeIdx];
-    const originalNode = nodeMap.get(backEdge.target);
-    if (!originalNode) break;
-
-    // Find a unique id for the duplicate
-    let dupIdx = 0;
-    let dupId = `${originalNode.id}\0dup\0${dupIdx}`;
-    while (nodeMap.has(dupId)) { dupIdx++; dupId = `${originalNode.id}\0dup\0${dupIdx}`; }
-
-    const dupNode: SankeyNodeDatum = {
-      id: dupId,
-      name: originalNode.name,
-      originalId: originalNode.originalId ?? originalNode.id,
-      color: originalNode.color,
-      selectionId: originalNode.selectionId,
-    };
-    newNodes.push(dupNode);
-    nodeMap.set(dupId, dupNode);
-
-    // Rewrite the back-edge to point to the duplicate
-    backEdge.target = dupId;
+    // Remove the back-edge
+    remaining.splice(backEdgeIdx, 1);
   }
 
-  return { nodes: newNodes, links: newLinks };
+  return { nodes: nodes.map(n => ({ ...n })), links: remaining };
 }
 
 // Data Transformer
@@ -1097,9 +1065,8 @@ export class Visual implements IVisual {
       ?? formattingCards.find(c => c.displayName === displayName);
 
     // In category mode, add per-node color pickers into Nodes card
-    // Filter out duplicated cycle nodes to avoid duplicate color pickers
     if (this.settings.nodeColorMode === 'category' && this.currentNodes.length > 0) {
-      const nodeColorSlices = this.currentNodes.filter(n => !n.originalId).map(node => ({
+      const nodeColorSlices = this.currentNodes.map(node => ({
         uid: `nodeColors_fill_${node.id}`,
         displayName: node.name,
         control: {

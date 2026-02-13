@@ -741,37 +741,28 @@ describe('resolveCycles', () => {
     expect(result.links).toHaveLength(0);
   });
 
-  it('duplicates target node for a simple A→B→A cycle', () => {
+  it('removes back-edge for a simple A→B→A cycle', () => {
     const nodes = [node('A'), node('B')];
     const links = [link('A', 'B', 10), link('B', 'A', 3)];
     const result = resolveCycles(nodes, links);
-    // One duplicate added
-    expect(result.nodes).toHaveLength(3);
-    // All links preserved (rewritten)
-    expect(result.links).toHaveLength(2);
-    // The duplicate should have the same name as the original
-    const dup = result.nodes.find(n => n.originalId);
-    expect(dup).toBeDefined();
-    expect(dup!.name).toBe('A');
-    expect(dup!.originalId).toBe('A');
-    // The back-edge should target the duplicate
-    const backEdge = result.links.find(l => l.source === 'B');
-    expect(backEdge!.target).toBe(dup!.id);
+    // Nodes unchanged
+    expect(result.nodes).toHaveLength(2);
+    // One back-edge removed
+    expect(result.links).toHaveLength(1);
+    expect(result.links[0].source).toBe('A');
+    expect(result.links[0].target).toBe('B');
   });
 
-  it('resolves a 3-node cycle A→B→C→A', () => {
+  it('removes back-edge for a 3-node cycle A→B→C→A', () => {
     const nodes = [node('A'), node('B'), node('C')];
     const links = [link('A', 'B', 10), link('B', 'C', 5), link('C', 'A', 2)];
     const result = resolveCycles(nodes, links);
-    // One duplicate node added
-    expect(result.nodes).toHaveLength(4);
-    // All 3 links preserved
-    expect(result.links).toHaveLength(3);
-    // No cycles remain: verify no link targets an original that also sources
-    const dup = result.nodes.find(n => n.originalId);
-    expect(dup).toBeDefined();
-    // The rewritten back-edge should target the duplicate
-    expect(result.links.find(l => l.target === dup!.id)).toBeDefined();
+    // Nodes unchanged
+    expect(result.nodes).toHaveLength(3);
+    // Back-edge C→A removed, forward links preserved
+    expect(result.links).toHaveLength(2);
+    expect(result.links.find(l => l.source === 'A' && l.target === 'B')).toBeDefined();
+    expect(result.links.find(l => l.source === 'B' && l.target === 'C')).toBeDefined();
   });
 
   it('does not mutate the original arrays', () => {
@@ -791,12 +782,9 @@ describe('resolveCycles', () => {
       link('X', 'Y', 8), link('Y', 'X', 1),
     ];
     const result = resolveCycles(nodes, links);
-    // Two duplicates
-    expect(result.nodes).toHaveLength(6);
-    // All 4 links preserved
-    expect(result.links).toHaveLength(4);
-    const dups = result.nodes.filter(n => n.originalId);
-    expect(dups).toHaveLength(2);
+    // Nodes unchanged, two back-edges removed
+    expect(result.nodes).toHaveLength(4);
+    expect(result.links).toHaveLength(2);
   });
 
   it('preserves non-cyclic links alongside a cycle', () => {
@@ -804,34 +792,22 @@ describe('resolveCycles', () => {
     const links = [
       link('A', 'B', 10),
       link('B', 'C', 5),
-      link('C', 'A', 2),  // cycle
+      link('C', 'A', 2),  // cycle back-edge
       link('D', 'E', 7),  // unrelated
     ];
     const result = resolveCycles(nodes, links);
-    // One duplicate + 5 originals
-    expect(result.nodes).toHaveLength(6);
-    // All 4 links preserved
-    expect(result.links).toHaveLength(4);
-    // D→E unchanged
+    // All nodes preserved, one back-edge removed
+    expect(result.nodes).toHaveLength(5);
+    expect(result.links).toHaveLength(3);
     expect(result.links.find(l => l.source === 'D' && l.target === 'E')).toBeDefined();
-  });
-
-  it('copies color and selectionId to duplicated nodes', () => {
-    const orig = node('A');
-    orig.color = '#ff0000';
-    const nodes = [orig, node('B')];
-    const links = [link('A', 'B', 10), link('B', 'A', 3)];
-    const result = resolveCycles(nodes, links);
-    const dup = result.nodes.find(n => n.originalId === 'A');
-    expect(dup!.color).toBe('#ff0000');
   });
 
   it('handles a cycle where both links have equal value', () => {
     const nodes = [node('A'), node('B')];
     const links = [link('A', 'B', 5), link('B', 'A', 5)];
     const result = resolveCycles(nodes, links);
-    // One duplicate, all links preserved
-    expect(result.nodes).toHaveLength(3);
-    expect(result.links).toHaveLength(2);
+    // One back-edge removed
+    expect(result.nodes).toHaveLength(2);
+    expect(result.links).toHaveLength(1);
   });
 });
