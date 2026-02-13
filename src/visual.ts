@@ -600,9 +600,11 @@ export function resolveNode(endpoint: string | number | ComputedNode): ComputedN
 // Cycle Resolution
 
 /**
- * Remove DFS back-edges to break cycles so d3-sankey receives a clean
- * DAG.  Forward links and all nodes are preserved — only the back-edge
- * that closes each cycle is dropped.  The inputs are never mutated.
+ * Break cycles by removing the **weakest** link (smallest value) in each
+ * cycle so d3-sankey receives a clean DAG.  DFS detects a back-edge,
+ * then the full cycle is traced to find the link with the minimum value.
+ * This ensures high-value forward links are never removed regardless of
+ * DFS traversal order.  The inputs are never mutated.
  */
 export function resolveCycles(
   nodes: SankeyNodeDatum[],
@@ -612,8 +614,9 @@ export function resolveCycles(
 
   let remaining = links.map(l => ({ ...l }));
 
-  // Iteratively find and remove one back-edge at a time.
+  // Iteratively find and remove the weakest link in each cycle.
   for (;;) {
+    // Build adjacency: node → list of link indices
     const adj = new Map<string, number[]>();
     for (let i = 0; i < remaining.length; i++) {
       let list = adj.get(remaining[i].source);
@@ -628,7 +631,9 @@ export function resolveCycles(
       color.set(link.target, WHITE);
     }
 
-    let backEdgeIdx = -1;
+    // Track the link used to reach each node (DFS tree edge)
+    const parentLink = new Map<string, number>();
+    let weakestIdx = -1;
 
     const dfs = (u: string): boolean => {
       color.set(u, GRAY);
@@ -636,10 +641,20 @@ export function resolveCycles(
         const v = remaining[idx].target;
         const c = color.get(v) ?? BLACK;
         if (c === GRAY) {
-          backEdgeIdx = idx;
+          // Cycle found — trace back from u to v to find the weakest link
+          weakestIdx = idx; // start with the back-edge itself
+          let cur = u;
+          while (cur !== v) {
+            const pIdx = parentLink.get(cur)!;
+            if (remaining[pIdx].value < remaining[weakestIdx].value) {
+              weakestIdx = pIdx;
+            }
+            cur = remaining[pIdx].source;
+          }
           return true;
         }
         if (c === WHITE) {
+          parentLink.set(v, idx);
           if (dfs(v)) return true;
         }
       }
@@ -653,10 +668,10 @@ export function resolveCycles(
         if (dfs(node)) { found = true; break; }
       }
     }
-    if (!found || backEdgeIdx < 0) break;
+    if (!found || weakestIdx < 0) break;
 
-    // Remove the back-edge
-    remaining.splice(backEdgeIdx, 1);
+    // Remove the weakest link in the cycle
+    remaining.splice(weakestIdx, 1);
   }
 
   return { nodes: nodes.map(n => ({ ...n })), links: remaining };
