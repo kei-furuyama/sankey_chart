@@ -1293,12 +1293,14 @@ export class Visual implements IVisual {
         nodeColorMode: this.settings.nodeColorMode,
         nodeDefaultColor: this.settings.nodeDefaultColor,
       });
+      let removedCyclicLinks: SankeyLinkDatum[] = [];
       if (data) {
         // Compute true node values from ALL links (including cyclic ones)
         // before removing cycles, so d3-sankey preserves correct node sizing.
-        const { links: dagLinks } = breakCycles(data.links);
+        const { links: dagLinks, removedLinks } = breakCycles(data.links);
         computeFixedNodeValues(data.nodes, data.links);
         data.links = dagLinks;
+        removedCyclicLinks = removedLinks;
       }
       if (!data || data.nodes.length === 0) {
         this.currentNodes = [];
@@ -1316,7 +1318,7 @@ export class Visual implements IVisual {
       this.target.style.pointerEvents = '';
       this.target.setAttribute('tabindex', '0');
       this.valueMeasureName = data.valueMeasureName;
-      this.renderSankey(data, viewport);
+      this.renderSankey(data, viewport, removedCyclicLinks);
 
       // Signal rendering finished
       this.eventService.renderingFinished(options);
@@ -1338,7 +1340,7 @@ export class Visual implements IVisual {
     return totals;
   }
 
-  private renderSankey(data: SankeyData, viewport: IViewport): void {
+  private renderSankey(data: SankeyData, viewport: IViewport, removedCyclicLinks: SankeyLinkDatum[] = []): void {
     const margin = {
       top: this.settings.marginTop,
       right: this.settings.marginRight,
@@ -1414,7 +1416,92 @@ export class Visual implements IVisual {
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
     this.renderLinks(g, graph.links);
+    this.renderCyclicLinks(g, graph.nodes, removedCyclicLinks, height);
     this.renderNodes(g, graph.nodes, width, layerTotals);
+  }
+
+  /**
+   * Render removed cyclic links as dashed arcs routed above or below
+   * the main diagram so that feedback flows remain visible.
+   */
+  private renderCyclicLinks(
+    container: Selection<SVGGElement, unknown, null, undefined>,
+    nodes: ComputedNode[],
+    removedLinks: SankeyLinkDatum[],
+    chartHeight: number,
+  ): void {
+    if (removedLinks.length === 0) return;
+
+    const nodeMap = new Map<string, ComputedNode>();
+    for (const node of nodes) nodeMap.set(node.id, node);
+
+    const formatter = this.getValueFormatter();
+    const tooltipService = this.tooltipService;
+    const { linkOpacity } = this.settings;
+    const finalOpacity = this.isHighContrastMode ? 0.8 : linkOpacity;
+
+    const group = container.append('g').classed('cyclic-links', true);
+
+    for (const link of removedLinks) {
+      const sourceNode = nodeMap.get(link.source);
+      const targetNode = nodeMap.get(link.target);
+      if (!sourceNode || !targetNode) continue;
+
+      // Source of the cyclic link is visually to the RIGHT of the target
+      // (because the link goes "backwards").  Draw an arc that goes
+      // below (or above) the chart to connect them.
+      const sx = sourceNode.x0 ?? 0;
+      const sy = ((sourceNode.y0 ?? 0) + (sourceNode.y1 ?? 0)) / 2;
+      const tx = (targetNode.x1 ?? 0);
+      const ty = ((targetNode.y0 ?? 0) + (targetNode.y1 ?? 0)) / 2;
+
+      // Choose whether to route above or below based on node center position
+      const midY = (sy + ty) / 2;
+      const routeBelow = midY < chartHeight / 2;
+      const offset = routeBelow
+        ? Math.max(chartHeight - midY + 20, 40)
+        : -Math.max(midY + 20, 40);
+
+      const linkWidth = Math.max(1, (link.value / (sourceNode.value ?? link.value)) * ((sourceNode.y1 ?? 0) - (sourceNode.y0 ?? 0)));
+
+      const path = `M${sx},${sy} C${sx - 30},${sy + offset} ${tx + 30},${ty + offset} ${tx},${ty}`;
+
+      const sourceColor = sourceNode.color ?? '#aaa';
+      const strokeColor = this.isHighContrastMode ? this.hcForeground('#aaa') : sourceColor;
+
+      group.append('path')
+        .attr('d', path)
+        .attr('fill', 'none')
+        .attr('stroke', strokeColor)
+        .attr('stroke-width', Math.max(1, linkWidth))
+        .attr('stroke-opacity', finalOpacity * 0.6)
+        .attr('stroke-dasharray', '6,4')
+        .style('cursor', 'pointer')
+        .on('mouseover', (event: MouseEvent) => {
+          select(event.currentTarget as SVGPathElement).attr('stroke-opacity', 0.8);
+          const tooltipData: VisualTooltipDataItem[] = [
+            { displayName: this.getLocalizedString('Visual_Tooltip_Flow', 'Flow'), value: `${sourceNode.name} → ${targetNode.name} ↻` },
+            { displayName: this.valueMeasureName, value: formatter.format(link.value) },
+          ];
+          tooltipService.show({
+            dataItems: tooltipData,
+            identities: [],
+            coordinates: [event.clientX, event.clientY],
+            isTouchEvent: false,
+          });
+        })
+        .on('mousemove', (event: MouseEvent) => {
+          tooltipService.move({
+            coordinates: [event.clientX, event.clientY],
+            identities: [],
+            isTouchEvent: false,
+          });
+        })
+        .on('mouseout', (event: MouseEvent) => {
+          select(event.currentTarget as SVGPathElement).attr('stroke-opacity', finalOpacity * 0.6);
+          tooltipService.hide({ immediately: true, isTouchEvent: false });
+        });
+    }
   }
 
   private renderLinks(
