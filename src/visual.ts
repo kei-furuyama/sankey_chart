@@ -1346,6 +1346,16 @@ export class Visual implements IVisual {
       links: data.links.map(d => ({ ...d })),
     });
 
+    // Guarantee a minimum height for nodes that lost all links after cycle
+    // removal (their value becomes 0 and d3-sankey assigns y1 === y0).
+    const MIN_NODE_HEIGHT = 2;
+    for (const node of graph.nodes) {
+      const h = (node.y1 ?? 0) - (node.y0 ?? 0);
+      if (h < MIN_NODE_HEIGHT) {
+        node.y1 = (node.y0 ?? 0) + MIN_NODE_HEIGHT;
+      }
+    }
+
     // Store nodes for keyboard navigation; clamp stale focus index
     this.currentNodes = graph.nodes;
     if (this.focusedNodeIndex >= graph.nodes.length) {

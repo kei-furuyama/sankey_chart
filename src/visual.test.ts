@@ -782,4 +782,13 @@ describe('breakCycles', () => {
     expect(result).toHaveLength(3);
     expect(result.find(l => l.source === 'D' && l.target === 'E')).toBeDefined();
   });
+
+  it('isolates a node when all its links are cyclic', () => {
+    // A↔B cycle only — after breaking, one node loses all links
+    const links = [link('A', 'B', 5), link('B', 'A', 5)];
+    const result = breakCycles(links);
+    // At least one link removed; the surviving nodes will have value=0
+    // (minimum-height guarantee is handled at render time, not here)
+    expect(result.length).toBeLessThan(links.length);
+  });
 });
