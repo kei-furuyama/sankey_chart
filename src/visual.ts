@@ -1157,42 +1157,39 @@ export class Visual implements IVisual {
     return getSelectionKey(id);
   }
 
-  /** Compute the correct stroke-opacity for a single link given current state.
-   *  This is the single source of truth for link stroke-opacity — used by both
+  /** Single source of truth for link opacity values — used by both
    *  updateSelectionState (bulk) and mouseout (single element). */
-  private computeLinkStrokeOpacity(link: ComputedLink): number {
-    const { linkOpacity } = this.settings;
-    if (this.cachedSelectedKeySet.size > 0) {
-      const selected = (linkDatum(link).selectionIds ?? []).some(
+  private computeLinkOpacities(link: ComputedLink): { opacity: number; strokeOpacity: number } {
+    const isLinkActive = (): boolean =>
+      (linkDatum(link).selectionIds ?? []).some(
         id => this.cachedSelectedKeySet.has(this.getSelectionKey(id)),
       );
-      return selected ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY;
-    }
-    if (this.hasHighlights) {
-      return (linkDatum(link).highlightValue ?? 0) > 0 ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY;
-    }
-    return this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : linkOpacity;
-  }
 
-  /** Compute the correct style opacity for a single link given current state */
-  private computeLinkOpacity(link: ComputedLink): number {
     if (this.cachedSelectedKeySet.size > 0) {
-      const selected = (linkDatum(link).selectionIds ?? []).some(
-        id => this.cachedSelectedKeySet.has(this.getSelectionKey(id)),
-      );
-      return selected ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY;
+      const active = isLinkActive();
+      return {
+        opacity: active ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY,
+        strokeOpacity: active ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY,
+      };
     }
     if (this.hasHighlights) {
-      return (linkDatum(link).highlightValue ?? 0) > 0 ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY;
+      const highlighted = (linkDatum(link).highlightValue ?? 0) > 0;
+      return {
+        opacity: highlighted ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY,
+        strokeOpacity: highlighted ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY,
+      };
     }
-    return SELECTED_OPACITY;
+    return {
+      opacity: SELECTED_OPACITY,
+      strokeOpacity: this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : this.settings.linkOpacity,
+    };
   }
 
   /**
    * Update visual state based on current selection
    */
   private updateSelectionState(selectedIds: ISelectionId[]): void {
-    // Cache the key set so computeLinkStrokeOpacity/computeLinkOpacity
+    // Cache the key set so computeLinkOpacities
     // can use it without rebuilding on every mouseout event
     this.cachedSelectedKeySet = new Set(selectedIds.map(id => this.getSelectionKey(id)));
 
@@ -1219,8 +1216,8 @@ export class Visual implements IVisual {
 
     // Update link opacity + stroke-opacity using single-source-of-truth helpers
     this.svg.selectAll('.links path')
-      .style('opacity', (d: unknown) => this.computeLinkOpacity(d as ComputedLink))
-      .attr('stroke-opacity', (d: unknown) => this.computeLinkStrokeOpacity(d as ComputedLink));
+      .style('opacity', (d: unknown) => this.computeLinkOpacities(d as ComputedLink).opacity)
+      .attr('stroke-opacity', (d: unknown) => this.computeLinkOpacities(d as ComputedLink).strokeOpacity);
 
     // Update label opacity
     this.svg.selectAll('.nodes g text')
@@ -1727,9 +1724,10 @@ export class Visual implements IVisual {
       .on('mouseout', (event: MouseEvent, d: ComputedLink) => {
         // Restore only the hovered link's opacity instead of
         // recalculating all elements for better performance
+        const { opacity, strokeOpacity } = this.computeLinkOpacities(d);
         select(event.currentTarget as SVGPathElement)
-          .attr('stroke-opacity', this.computeLinkStrokeOpacity(d))
-          .style('opacity', this.computeLinkOpacity(d));
+          .attr('stroke-opacity', strokeOpacity)
+          .style('opacity', opacity);
         tooltipService.hide({ immediately: true, isTouchEvent: false });
       });
 
@@ -1970,7 +1968,6 @@ export class Visual implements IVisual {
    * Show landing page when no data is available
    */
   private showLandingPage(viewport: IViewport): void {
-    const textColor = this.hcForeground('#333');
     const subtextColor = this.hcForeground('#555');
     const iconColor = this.hcForeground('#0078d4');
 
@@ -2014,38 +2011,15 @@ export class Visual implements IVisual {
       .attr('stroke-width', 4)
       .attr('stroke-opacity', 0.4);
 
-    // Title
+    // Instruction
     landingGroup.append('text')
       .attr('y', 10)
       .attr('text-anchor', 'middle')
       .attr('font-family', this.settings.labelFontFamily)
-      .attr('font-size', '16px')
-      .attr('font-weight', '600')
-      .attr('fill', textColor)
-      .text('Sankey Chart');
-
-    // Instructions
-    const instructions = [
-      'To get started, add data fields:',
-      '',
-      'Source – Origin node name',
-      'Target – Destination node name',
-      'Value – Flow quantity (optional)',
-    ];
-
-    const instructionGroup = landingGroup.append('g')
-      .attr('transform', 'translate(0, 35)');
-
-    instructions.forEach((text, i) => {
-      instructionGroup.append('text')
-        .attr('y', i * 18)
-        .attr('text-anchor', 'middle')
-        .attr('font-family', this.settings.labelFontFamily)
-        .attr('font-size', i === 0 ? '13px' : '12px')
-        .attr('font-weight', i === 0 ? '500' : '400')
-        .attr('fill', i === 0 ? textColor : subtextColor)
-        .text(text);
-    });
+      .attr('font-size', '14px')
+      .attr('font-weight', '500')
+      .attr('fill', subtextColor)
+      .text('市区町村を選択してください');
   }
 
   private readAllowInteractions(): boolean {
