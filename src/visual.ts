@@ -35,7 +35,8 @@ export interface SankeyNodeDatum {
   id: string;
   name: string;
   color?: string;
-  selectionId?: ISelectionId;
+  selectionIds?: ISelectionId[];
+  highlightValue?: number;
   originalId?: string;
 }
 
@@ -44,6 +45,7 @@ export interface SankeyLinkDatum {
   target: string;
   value: number;
   selectionIds?: ISelectionId[];
+  highlightValue?: number;
 }
 
 export interface SankeyData {
@@ -109,6 +111,11 @@ export const DEFAULT_LAYER_PALETTE = [
   '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac',
 ];
 export const VALID_DATA_LABEL_DISPLAY_MODES: DataLabelDisplayMode[] = ['value', 'percentage', 'both'];
+
+/** Extract a stable string key from a Power BI selection ID for deduplication/comparison */
+export function getSelectionKey(id: ISelectionId): string {
+  return (id as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(id);
+}
 
 export interface VisualSettings {
   nodeWidth: number;
@@ -749,7 +756,10 @@ export function resolveCycles(
     if (!nodePos.has(link.target)) nodePos.set(link.target, pos++);
   }
 
-  const remaining = links.map(l => ({ ...l }));
+  const remaining = links.map(l => ({
+    ...l,
+    selectionIds: l.selectionIds ? [...l.selectionIds] : undefined,
+  }));
   const newNodes = nodes.map(n => ({ ...n }));
   let dupeCounter = 0;
 
@@ -768,6 +778,8 @@ export function resolveCycles(
         ...originalNode,
         id: dupeId,
         originalId: originalNode.originalId ?? targetId,
+        // Deep-copy arrays to avoid shared references with the original node
+        selectionIds: originalNode.selectionIds ? [...originalNode.selectionIds] : undefined,
       });
       feedbackLink.target = dupeId;
       // Assign a position to the new node so further iterations work
@@ -800,8 +812,16 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
     return null;
   }
 
+  const dedupeSelectionIds = (ids: ISelectionId[]): ISelectionId[] => {
+    const unique = new Map<string, ISelectionId>();
+    for (const id of ids) {
+      unique.set(getSelectionKey(id), id);
+    }
+    return [...unique.values()];
+  };
+
   // Track nodes and their selection IDs
-  const nodeMap = new Map<string, { selectionIds: ISelectionId[] }>();
+  const nodeMap = new Map<string, { selectionIds: ISelectionId[]; highlightValue: number }>();
   const linkMap = new Map<string, SankeyLinkDatum>();
 
   for (let i = 0; i < sourceColumn.values.length; i++) {
@@ -813,22 +833,32 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
       continue;
     }
 
-    // Create selection ID for this row
+    // Create selection ID for this row using sourceColumn only.
+    // Power BI's withCategory chaining overwrites earlier calls, so we cannot
+    // combine source + target into one ID. This means cross-filtering operates
+    // at source-node granularity (clicking link A->B also highlights A->C).
     const selectionId = host.createSelectionIdBuilder()
       .withCategory(sourceColumn, i)
       .createSelectionId();
+    const rawHighlight = valueColumn?.highlights?.[i];
+    const highlightValue = typeof rawHighlight === 'number' && Number.isFinite(rawHighlight) && rawHighlight > 0
+      ? rawHighlight
+      : 0;
 
-    // Track source node
+    // Track source node (use max to avoid double-counting when a node
+    // appears as both source and target across different rows)
     if (!nodeMap.has(source)) {
-      nodeMap.set(source, { selectionIds: [] });
+      nodeMap.set(source, { selectionIds: [], highlightValue: 0 });
     }
     nodeMap.get(source)!.selectionIds.push(selectionId);
+    nodeMap.get(source)!.highlightValue = Math.max(nodeMap.get(source)!.highlightValue, highlightValue);
 
     // Track target node
     if (!nodeMap.has(target)) {
-      nodeMap.set(target, { selectionIds: [] });
+      nodeMap.set(target, { selectionIds: [], highlightValue: 0 });
     }
     nodeMap.get(target)!.selectionIds.push(selectionId);
+    nodeMap.get(target)!.highlightValue = Math.max(nodeMap.get(target)!.highlightValue, highlightValue);
 
     // Track link with selection IDs
     const key = `${source}\0${target}`;
@@ -836,8 +866,9 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
     if (existing) {
       existing.value += value;
       existing.selectionIds?.push(selectionId);
+      existing.highlightValue = (existing.highlightValue ?? 0) + highlightValue;
     } else {
-      linkMap.set(key, { source, target, value, selectionIds: [selectionId] });
+      linkMap.set(key, { source, target, value, selectionIds: [selectionId], highlightValue });
     }
   }
 
@@ -857,7 +888,6 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
     }
   }
 
-  // Create nodes with first selection ID (for cross-filtering by node)
   const nodes: SankeyNodeDatum[] = Array.from(nodeMap.entries()).map(([id, data]) => ({
     id,
     name: id,
@@ -865,12 +895,16 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
     color: colorMode === 'single' || colorMode === 'layer'
       ? defaultColor
       : userColorMap.get(id) ?? host.colorPalette.getColor(id).value,
-    selectionId: data.selectionIds[0], // Use first selectionId for the node
+    selectionIds: dedupeSelectionIds(data.selectionIds),
+    highlightValue: data.highlightValue,
   }));
 
   return {
     nodes,
-    links: Array.from(linkMap.values()),
+    links: Array.from(linkMap.values()).map(link => ({
+      ...link,
+      selectionIds: dedupeSelectionIds(link.selectionIds ?? []),
+    })),
     valueMeasureName: valueColumn?.source.displayName ?? 'Value',
   };
 }
@@ -916,6 +950,8 @@ export class Visual implements IVisual {
 
   // Interaction state
   private allowInteractions: boolean = true;
+  private cachedSelectedKeySet: Set<string> = new Set();
+  private hasHighlights: boolean = false;
   private readonly instanceId: string;
   private readonly abortController = new AbortController();
 
@@ -1020,8 +1056,9 @@ export class Visual implements IVisual {
           // Select focused node (only if interactions allowed)
           if (this.allowInteractions && this.focusedNodeIndex >= 0 && this.focusedNodeIndex < this.currentNodes.length) {
             const node = this.currentNodes[this.focusedNodeIndex];
-            if (node.selectionId) {
-              this.selectionManager.select(node.selectionId, event.ctrlKey || event.metaKey);
+            const selectionIds = node.selectionIds ?? [];
+            if (selectionIds.length > 0) {
+              this.selectionManager.select(selectionIds, event.ctrlKey || event.metaKey);
             }
           }
           event.preventDefault();
@@ -1117,51 +1154,74 @@ export class Visual implements IVisual {
   }
 
   private getSelectionKey(id: ISelectionId): string {
-    return (id as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(id);
+    return getSelectionKey(id);
+  }
+
+  /** Single source of truth for link opacity values — used by both
+   *  updateSelectionState (bulk) and mouseout (single element). */
+  private computeLinkOpacities(link: ComputedLink): { opacity: number; strokeOpacity: number } {
+    const isLinkActive = (): boolean =>
+      (linkDatum(link).selectionIds ?? []).some(
+        id => this.cachedSelectedKeySet.has(this.getSelectionKey(id)),
+      );
+
+    if (this.cachedSelectedKeySet.size > 0) {
+      const active = isLinkActive();
+      return {
+        opacity: active ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY,
+        strokeOpacity: active ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY,
+      };
+    }
+    if (this.hasHighlights) {
+      const highlighted = (linkDatum(link).highlightValue ?? 0) > 0;
+      return {
+        opacity: highlighted ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY,
+        strokeOpacity: highlighted ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY,
+      };
+    }
+    return {
+      opacity: SELECTED_OPACITY,
+      strokeOpacity: this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : this.settings.linkOpacity,
+    };
   }
 
   /**
    * Update visual state based on current selection
    */
   private updateSelectionState(selectedIds: ISelectionId[]): void {
-    const hasSelection = selectedIds.length > 0;
-    const { linkOpacity } = this.settings;
+    // Cache the key set so computeLinkOpacities
+    // can use it without rebuilding on every mouseout event
+    this.cachedSelectedKeySet = new Set(selectedIds.map(id => this.getSelectionKey(id)));
 
-    // Pre-build Set for O(1) lookup instead of O(n) per check
-    const selectedKeySet = new Set(selectedIds.map(id => this.getSelectionKey(id)));
+    const hasSelection = this.cachedSelectedKeySet.size > 0;
 
-    const isSelected = (id: ISelectionId): boolean => selectedKeySet.has(this.getSelectionKey(id));
+    const isNodeSelected = (node: ComputedNode): boolean =>
+      (node.selectionIds ?? []).some(id => this.cachedSelectedKeySet.has(this.getSelectionKey(id)));
+    const hasNodeHighlight = (node: ComputedNode): boolean =>
+      (node.highlightValue ?? 0) > 0;
+
+    const computeNodeOpacity = (node: ComputedNode): number => {
+      if (hasSelection) {
+        return isNodeSelected(node) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
+      }
+      if (this.hasHighlights) {
+        return hasNodeHighlight(node) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
+      }
+      return SELECTED_OPACITY;
+    };
 
     // Update node opacity based on selection
     this.svg.selectAll('.nodes g rect')
-      .style('opacity', (d: unknown) => {
-        if (!hasSelection) return SELECTED_OPACITY;
-        const node = d as ComputedNode;
-        return node.selectionId && isSelected(node.selectionId) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
-      });
+      .style('opacity', (d: unknown) => computeNodeOpacity(d as ComputedNode));
 
-    // Update link opacity based on selection
+    // Update link opacity + stroke-opacity using single-source-of-truth helpers
     this.svg.selectAll('.links path')
-      .style('opacity', (d: unknown) => {
-        if (!hasSelection) return SELECTED_OPACITY;
-        const link = d as ComputedLink;
-        const linkSelectionIds = linkDatum(link).selectionIds ?? [];
-        return linkSelectionIds.some(lid => isSelected(lid)) ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY;
-      })
-      .attr('stroke-opacity', (d: unknown) => {
-        if (!hasSelection) return this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : linkOpacity;
-        const link = d as ComputedLink;
-        const linkSelectionIds = linkDatum(link).selectionIds ?? [];
-        return linkSelectionIds.some(lid => isSelected(lid)) ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY;
-      });
+      .style('opacity', (d: unknown) => this.computeLinkOpacities(d as ComputedLink).opacity)
+      .attr('stroke-opacity', (d: unknown) => this.computeLinkOpacities(d as ComputedLink).strokeOpacity);
 
     // Update label opacity
     this.svg.selectAll('.nodes g text')
-      .style('opacity', (d: unknown) => {
-        if (!hasSelection) return SELECTED_OPACITY;
-        const node = d as ComputedNode;
-        return node.selectionId && isSelected(node.selectionId) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
-      });
+      .style('opacity', (d: unknown) => computeNodeOpacity(d as ComputedNode));
   }
 
   /**
@@ -1215,23 +1275,26 @@ export class Visual implements IVisual {
     if (this.settings.nodeColorMode === 'category' && this.currentNodes.length > 0) {
       // Filter out duplicate nodes created by cycle resolution
       const uniqueNodes = this.currentNodes.filter(n => !n.originalId);
-      const nodeColorSlices = uniqueNodes.map(node => ({
-        uid: `nodeColors_fill_${node.id}`,
-        displayName: node.name,
-        control: {
-          type: powerbi.visuals.FormattingComponent.ColorPicker,
-          properties: {
-            descriptor: {
-              objectName: 'nodeColors',
-              propertyName: 'fill',
-              selector: node.selectionId
-                ? (node.selectionId as powerbi.visuals.ISelectionId).getSelector()
-                : null,
+      const nodeColorSlices = uniqueNodes.map(node => {
+        const firstId = (node.selectionIds ?? [])[0];
+        return {
+          uid: `nodeColors_fill_${node.id}`,
+          displayName: node.name,
+          control: {
+            type: powerbi.visuals.FormattingComponent.ColorPicker,
+            properties: {
+              descriptor: {
+                objectName: 'nodeColors',
+                propertyName: 'fill',
+                selector: firstId
+                  ? (firstId as powerbi.visuals.ISelectionId).getSelector()
+                  : null,
+              },
+              value: { value: node.color ?? this.host.colorPalette.getColor(node.id).value },
             },
-            value: { value: node.color ?? this.host.colorPalette.getColor(node.id).value },
           },
-        },
-      })) as unknown as powerbi.visuals.FormattingSlice[];
+        };
+      }) as unknown as powerbi.visuals.FormattingSlice[];
 
       const nodesCard = findCard('nodeSettings_card', 'Nodes');
       if (nodesCard) {
@@ -1408,6 +1471,7 @@ export class Visual implements IVisual {
         this.currentLayerDepths = [];
         this.currentNodeLayerDepths = [];
         this.currentLabelLayerDepths = [];
+        this.hasHighlights = false;
         this.focusedNodeIndex = -1;
         this.svg.attr('aria-label', 'Sankey Chart: No data');
         this.showLandingPage(viewport);
@@ -1420,7 +1484,9 @@ export class Visual implements IVisual {
       this.target.style.pointerEvents = '';
       this.target.setAttribute('tabindex', '0');
       this.valueMeasureName = data.valueMeasureName;
+      this.hasHighlights = data.links.some(link => (link.highlightValue ?? 0) > 0);
       this.renderSankey(data, viewport);
+      this.updateSelectionState(this.selectionManager.getSelectionIds());
 
       // Signal rendering finished
       this.eventService.renderingFinished(options);
@@ -1622,6 +1688,7 @@ export class Visual implements IVisual {
         const linkData = linkDatum(d);
         const selectionIds = linkData.selectionIds ?? [];
         if (selectionIds.length > 0) {
+          // showContextMenu accepts a single ISelectionId only
           selectionManager.showContextMenu(
             selectionIds[0],
             { x: event.clientX, y: event.clientY }
@@ -1631,7 +1698,9 @@ export class Visual implements IVisual {
         event.stopPropagation();
       })
       .on('mouseover', (event: MouseEvent, d: ComputedLink) => {
-        select(event.currentTarget as SVGPathElement).attr('stroke-opacity', HIGHLIGHTED_LINK_OPACITY);
+        const el = select(event.currentTarget as SVGPathElement);
+        el.attr('stroke-opacity', HIGHLIGHTED_LINK_OPACITY)
+          .style('opacity', SELECTED_OPACITY);
         const sourceName = resolveNode(d.source).name;
         const targetName = resolveNode(d.target).name;
         const tooltipData: VisualTooltipDataItem[] = [
@@ -1652,8 +1721,13 @@ export class Visual implements IVisual {
           isTouchEvent: false,
         });
       })
-      .on('mouseout', (event: MouseEvent) => {
-        select(event.currentTarget as SVGPathElement).attr('stroke-opacity', this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : linkOpacity);
+      .on('mouseout', (event: MouseEvent, d: ComputedLink) => {
+        // Restore only the hovered link's opacity instead of
+        // recalculating all elements for better performance
+        const { opacity, strokeOpacity } = this.computeLinkOpacities(d);
+        select(event.currentTarget as SVGPathElement)
+          .attr('stroke-opacity', strokeOpacity)
+          .style('opacity', opacity);
         tooltipService.hide({ immediately: true, isTouchEvent: false });
       });
 
@@ -1756,17 +1830,21 @@ export class Visual implements IVisual {
       .on('click', (event: MouseEvent, d: ComputedNode) => {
         // Handle click selection for nodes (only if interactions allowed)
         if (!this.allowInteractions) return;
-        if (d.selectionId) {
-          selectionManager.select(d.selectionId, event.ctrlKey || event.metaKey);
+        const selectionIds = d.selectionIds ?? [];
+        if (selectionIds.length > 0) {
+          selectionManager.select(selectionIds, event.ctrlKey || event.metaKey);
         }
         event.stopPropagation();
       })
       .on('contextmenu', (event: MouseEvent, d: ComputedNode) => {
         // Show context menu for nodes (only if interactions allowed)
         if (!this.allowInteractions) return;
-        if (d.selectionId) {
+        const selectionIds = d.selectionIds ?? [];
+        if (selectionIds.length > 0) {
+          // showContextMenu accepts a single ISelectionId; use the first one.
+          // This means drill-down targets the first associated row only.
           selectionManager.showContextMenu(
-            d.selectionId,
+            selectionIds[0],
             { x: event.clientX, y: event.clientY }
           );
         }
@@ -1890,7 +1968,6 @@ export class Visual implements IVisual {
    * Show landing page when no data is available
    */
   private showLandingPage(viewport: IViewport): void {
-    const textColor = this.hcForeground('#333');
     const subtextColor = this.hcForeground('#555');
     const iconColor = this.hcForeground('#0078d4');
 
@@ -1934,38 +2011,15 @@ export class Visual implements IVisual {
       .attr('stroke-width', 4)
       .attr('stroke-opacity', 0.4);
 
-    // Title
+    // Instruction
     landingGroup.append('text')
       .attr('y', 10)
       .attr('text-anchor', 'middle')
       .attr('font-family', this.settings.labelFontFamily)
-      .attr('font-size', '16px')
-      .attr('font-weight', '600')
-      .attr('fill', textColor)
-      .text('Sankey Chart');
-
-    // Instructions
-    const instructions = [
-      'To get started, add data fields:',
-      '',
-      'Source – Origin node name',
-      'Target – Destination node name',
-      'Value – Flow quantity (optional)',
-    ];
-
-    const instructionGroup = landingGroup.append('g')
-      .attr('transform', 'translate(0, 35)');
-
-    instructions.forEach((text, i) => {
-      instructionGroup.append('text')
-        .attr('y', i * 18)
-        .attr('text-anchor', 'middle')
-        .attr('font-family', this.settings.labelFontFamily)
-        .attr('font-size', i === 0 ? '13px' : '12px')
-        .attr('font-weight', i === 0 ? '500' : '400')
-        .attr('fill', i === 0 ? textColor : subtextColor)
-        .text(text);
-    });
+      .attr('font-size', '14px')
+      .attr('font-weight', '500')
+      .attr('fill', subtextColor)
+      .text('市区町村を選択してください');
   }
 
   private readAllowInteractions(): boolean {

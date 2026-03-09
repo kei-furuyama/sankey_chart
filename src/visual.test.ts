@@ -41,6 +41,7 @@ import {
   VALID_DATA_LABEL_DISPLAY_MODES,
   MAX_LAYER_COLORS,
   DEFAULT_LAYER_PALETTE,
+  getSelectionKey,
 } from './visual';
 
 import type {
@@ -485,16 +486,47 @@ describe('parseSettings', () => {
 });
 
 // ---------------------------------------------------------------------------
+// getSelectionKey
+// ---------------------------------------------------------------------------
+
+describe('getSelectionKey', () => {
+  it('uses getKey() when available', () => {
+    const id = { getKey: () => 'key-123' } as never;
+    expect(getSelectionKey(id)).toBe('key-123');
+  });
+
+  it('falls back to JSON.stringify when getKey is missing', () => {
+    const id = { foo: 'bar' } as never;
+    expect(getSelectionKey(id)).toBe(JSON.stringify({ foo: 'bar' }));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // transformDataView
 // ---------------------------------------------------------------------------
 
 describe('transformDataView', () => {
   // Minimal mock for IVisualHost
-  const mockSelectionId = { getKey: () => 'mock-key' };
+  // Mock mirrors real Power BI behavior: withCategory produces an ID
+  // based on the column identity + row index, not just the cell value.
   const mockHost = {
-    createSelectionIdBuilder: () => ({
-      withCategory: () => ({ createSelectionId: () => ({ ...mockSelectionId }) }),
-    }),
+    createSelectionIdBuilder: () => {
+      const parts: string[] = [];
+      return {
+        withCategory(categoryColumn: { values?: unknown[] }, index: number) {
+          const value = String(categoryColumn.values?.[index] ?? '');
+          parts.push(`${value}@${index}`);
+          return this;
+        },
+        createSelectionId: () => {
+          const key = parts.join('|');
+          return {
+            getKey: () => key,
+            getSelector: () => ({ key }),
+          };
+        },
+      };
+    },
     colorPalette: {
       getColor: (id: string) => ({ value: `#color-${id}` }),
     },
@@ -504,6 +536,7 @@ describe('transformDataView', () => {
     sources: (string | null)[],
     targets: (string | null)[],
     values?: (number | null)[],
+    highlights?: (number | null)[],
   ) => ({
     categorical: {
       categories: [
@@ -511,7 +544,7 @@ describe('transformDataView', () => {
         { source: { roles: { target: true } }, values: targets },
       ],
       values: values
-        ? [{ source: { roles: { value: true }, displayName: 'Amount' }, values }]
+        ? [{ source: { roles: { value: true }, displayName: 'Amount' }, values, highlights }]
         : [],
     },
   }) as unknown as Parameters<typeof transformDataView>[0]['dataView'];
@@ -674,12 +707,89 @@ describe('transformDataView', () => {
     expect(result!.links[0].selectionIds!.length).toBeGreaterThan(0);
   });
 
-  it('creates selectionId on nodes', () => {
+  it('creates selectionIds on nodes', () => {
     const result = transformDataView({
       dataView: makeDataView(['A'], ['B'], [10]),
       host: mockHost,
     });
-    expect(result!.nodes.every(n => n.selectionId !== undefined)).toBe(true);
+    expect(result!.nodes.every(n => (n.selectionIds?.length ?? 0) > 0)).toBe(true);
+  });
+
+  it('aggregates all row selectionIds onto a node', () => {
+    const result = transformDataView({
+      dataView: makeDataView(['A', 'A'], ['B', 'C'], [10, 20]),
+      host: mockHost,
+    });
+    const nodeA = result!.nodes.find(n => n.id === 'A');
+    // Row 0 and row 1 both have source 'A' but different row indices → 2 distinct IDs
+    expect(nodeA!.selectionIds?.map(id => id.getKey())).toEqual(['A@0', 'A@1']);
+  });
+
+  it('collects selectionIds for target-only nodes from their associated rows', () => {
+    const result = transformDataView({
+      dataView: makeDataView(['A', 'C'], ['B', 'B'], [10, 20]),
+      host: mockHost,
+    });
+    const nodeB = result!.nodes.find(n => n.id === 'B');
+    // Node B is target in both rows; selectionIds come from source column rows
+    expect(nodeB!.selectionIds?.map(id => id.getKey())).toEqual(['A@0', 'C@1']);
+  });
+
+  it('captures highlight values on links and nodes', () => {
+    const result = transformDataView({
+      dataView: makeDataView(['A', 'B'], ['B', 'C'], [10, 20], [4, null]),
+      host: mockHost,
+    });
+    const nodeA = result!.nodes.find(n => n.id === 'A');
+    const nodeB = result!.nodes.find(n => n.id === 'B');
+    expect(result!.links[0].highlightValue).toBe(4);
+    expect(result!.links[1].highlightValue).toBe(0);
+    expect(nodeA!.highlightValue).toBe(4);
+    expect(nodeB!.highlightValue).toBe(4);
+  });
+
+  it('aggregates highlight values on duplicate links', () => {
+    const result = transformDataView({
+      dataView: makeDataView(['A', 'A'], ['B', 'B'], [10, 20], [3, 5]),
+      host: mockHost,
+    });
+    // Duplicate A->B links are merged; highlights should be summed
+    expect(result!.links).toHaveLength(1);
+    expect(result!.links[0].highlightValue).toBe(8);
+  });
+
+  it('treats negative highlight values as zero', () => {
+    const result = transformDataView({
+      dataView: makeDataView(['A'], ['B'], [10], [-5]),
+      host: mockHost,
+    });
+    expect(result!.links[0].highlightValue).toBe(0);
+    expect(result!.nodes.find(n => n.id === 'A')!.highlightValue).toBe(0);
+  });
+
+  it('deduplicates selectionIds on nodes appearing as both source and target', () => {
+    // B appears as target of A->B and source of B->C
+    // Both rows produce the same selectionId key based on sourceColumn index
+    const result = transformDataView({
+      dataView: makeDataView(['A', 'B'], ['B', 'C'], [10, 20]),
+      host: mockHost,
+    });
+    const nodeB = result!.nodes.find(n => n.id === 'B');
+    const keys = nodeB!.selectionIds?.map(id => id.getKey());
+    // Should have 2 unique keys (A and B as sources), no duplicates
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
+  });
+
+  it('uses max for node highlightValue to avoid double-counting', () => {
+    // B is target of A->B (highlight=4) and source of B->C (highlight=7)
+    // Node B should have max(4, 7) = 7, not sum 4+7 = 11
+    const result = transformDataView({
+      dataView: makeDataView(['A', 'B'], ['B', 'C'], [10, 20], [4, 7]),
+      host: mockHost,
+    });
+    const nodeB = result!.nodes.find(n => n.id === 'B');
+    expect(nodeB!.highlightValue).toBe(7);
   });
 
   it('returns valueMeasureName from column', () => {
@@ -864,6 +974,42 @@ describe('resolveCycles', () => {
     resolveCycles(nodes, links);
     expect(nodes).toEqual(origNodes);
     expect(links).toEqual(origLinks);
+  });
+
+  it('deep-copies selectionIds on duplicate nodes so arrays are independent', () => {
+    const selId = { getKey: () => 'sel-1' } as unknown as import('powerbi-visuals-api').extensibility.ISelectionId;
+    const nodes: SankeyNodeDatum[] = [
+      { id: 'A', name: 'A', selectionIds: [selId] },
+      { id: 'B', name: 'B' },
+    ];
+    const links = [link('A', 'B', 10), link('B', 'A', 3)];
+    const result = resolveCycles(nodes, links);
+    const dupeNode = result.nodes.find(n => n.originalId === 'A');
+    expect(dupeNode).toBeDefined();
+    // Array is a separate reference but contains the same IDs
+    expect(dupeNode!.selectionIds).not.toBe(nodes[0].selectionIds);
+    expect(dupeNode!.selectionIds).toEqual([selId]);
+  });
+
+  it('deep-copies selectionIds on links so arrays are independent', () => {
+    const selId = { getKey: () => 'sel-2' } as unknown as import('powerbi-visuals-api').extensibility.ISelectionId;
+    const nodes: SankeyNodeDatum[] = [
+      { id: 'A', name: 'A' },
+      { id: 'B', name: 'B' },
+    ];
+    const links: SankeyLinkDatum[] = [
+      { source: 'A', target: 'B', value: 10, selectionIds: [selId] },
+      { source: 'B', target: 'A', value: 3, selectionIds: [selId] },
+    ];
+    const result = resolveCycles(nodes, links);
+    // Verify result links don't share selectionIds arrays with input
+    for (const rl of result.links) {
+      for (const il of links) {
+        if (rl.selectionIds && il.selectionIds) {
+          expect(rl.selectionIds).not.toBe(il.selectionIds);
+        }
+      }
+    }
   });
 
   it('handles multiple independent 2-node cycles with duplication', () => {
