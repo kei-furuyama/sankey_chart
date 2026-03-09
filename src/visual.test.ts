@@ -490,11 +490,23 @@ describe('parseSettings', () => {
 
 describe('transformDataView', () => {
   // Minimal mock for IVisualHost
-  const mockSelectionId = { getKey: () => 'mock-key' };
   const mockHost = {
-    createSelectionIdBuilder: () => ({
-      withCategory: () => ({ createSelectionId: () => ({ ...mockSelectionId }) }),
-    }),
+    createSelectionIdBuilder: () => {
+      const parts: string[] = [];
+      return {
+        withCategory(categoryColumn: { values?: unknown[] }, index: number) {
+          parts.push(String(categoryColumn.values?.[index] ?? ''));
+          return this;
+        },
+        createSelectionId: () => {
+          const key = parts.join('|');
+          return {
+            getKey: () => key,
+            getSelector: () => ({ key }),
+          };
+        },
+      };
+    },
     colorPalette: {
       getColor: (id: string) => ({ value: `#color-${id}` }),
     },
@@ -504,6 +516,7 @@ describe('transformDataView', () => {
     sources: (string | null)[],
     targets: (string | null)[],
     values?: (number | null)[],
+    highlights?: (number | null)[],
   ) => ({
     categorical: {
       categories: [
@@ -511,7 +524,7 @@ describe('transformDataView', () => {
         { source: { roles: { target: true } }, values: targets },
       ],
       values: values
-        ? [{ source: { roles: { value: true }, displayName: 'Amount' }, values }]
+        ? [{ source: { roles: { value: true }, displayName: 'Amount' }, values, highlights }]
         : [],
     },
   }) as unknown as Parameters<typeof transformDataView>[0]['dataView'];
@@ -674,12 +687,43 @@ describe('transformDataView', () => {
     expect(result!.links[0].selectionIds!.length).toBeGreaterThan(0);
   });
 
-  it('creates selectionId on nodes', () => {
+  it('creates selectionIds on nodes', () => {
     const result = transformDataView({
       dataView: makeDataView(['A'], ['B'], [10]),
       host: mockHost,
     });
-    expect(result!.nodes.every(n => n.selectionId !== undefined)).toBe(true);
+    expect(result!.nodes.every(n => (n.selectionIds?.length ?? 0) > 0)).toBe(true);
+  });
+
+  it('aggregates all row selectionIds onto a node', () => {
+    const result = transformDataView({
+      dataView: makeDataView(['A', 'A'], ['B', 'C'], [10, 20]),
+      host: mockHost,
+    });
+    const nodeA = result!.nodes.find(n => n.id === 'A');
+    expect(nodeA!.selectionIds?.map(id => id.getKey())).toEqual(['A|B', 'A|C']);
+  });
+
+  it('uses combined source and target identities for target-only nodes', () => {
+    const result = transformDataView({
+      dataView: makeDataView(['A', 'C'], ['B', 'B'], [10, 20]),
+      host: mockHost,
+    });
+    const nodeB = result!.nodes.find(n => n.id === 'B');
+    expect(nodeB!.selectionIds?.map(id => id.getKey())).toEqual(['A|B', 'C|B']);
+  });
+
+  it('captures highlight values on links and nodes', () => {
+    const result = transformDataView({
+      dataView: makeDataView(['A', 'B'], ['B', 'C'], [10, 20], [4, null]),
+      host: mockHost,
+    });
+    const nodeA = result!.nodes.find(n => n.id === 'A');
+    const nodeB = result!.nodes.find(n => n.id === 'B');
+    expect(result!.links[0].highlightValue).toBe(4);
+    expect(result!.links[1].highlightValue).toBe(0);
+    expect(nodeA!.highlightValue).toBe(4);
+    expect(nodeB!.highlightValue).toBe(4);
   });
 
   it('returns valueMeasureName from column', () => {

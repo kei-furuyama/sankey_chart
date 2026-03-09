@@ -35,7 +35,8 @@ export interface SankeyNodeDatum {
   id: string;
   name: string;
   color?: string;
-  selectionId?: ISelectionId;
+  selectionIds?: ISelectionId[];
+  highlightValue?: number;
   originalId?: string;
 }
 
@@ -44,6 +45,7 @@ export interface SankeyLinkDatum {
   target: string;
   value: number;
   selectionIds?: ISelectionId[];
+  highlightValue?: number;
 }
 
 export interface SankeyData {
@@ -800,8 +802,19 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
     return null;
   }
 
+  const getSelectionKey = (id: ISelectionId): string =>
+    (id as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(id);
+
+  const dedupeSelectionIds = (ids: ISelectionId[]): ISelectionId[] => {
+    const unique = new Map<string, ISelectionId>();
+    for (const id of ids) {
+      unique.set(getSelectionKey(id), id);
+    }
+    return [...unique.values()];
+  };
+
   // Track nodes and their selection IDs
-  const nodeMap = new Map<string, { selectionIds: ISelectionId[] }>();
+  const nodeMap = new Map<string, { selectionIds: ISelectionId[]; highlightValue: number }>();
   const linkMap = new Map<string, SankeyLinkDatum>();
 
   for (let i = 0; i < sourceColumn.values.length; i++) {
@@ -816,19 +829,26 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
     // Create selection ID for this row
     const selectionId = host.createSelectionIdBuilder()
       .withCategory(sourceColumn, i)
+      .withCategory(targetColumn, i)
       .createSelectionId();
+    const rawHighlight = valueColumn?.highlights?.[i];
+    const highlightValue = typeof rawHighlight === 'number' && Number.isFinite(rawHighlight) && rawHighlight > 0
+      ? rawHighlight
+      : 0;
 
     // Track source node
     if (!nodeMap.has(source)) {
-      nodeMap.set(source, { selectionIds: [] });
+      nodeMap.set(source, { selectionIds: [], highlightValue: 0 });
     }
     nodeMap.get(source)!.selectionIds.push(selectionId);
+    nodeMap.get(source)!.highlightValue += highlightValue;
 
     // Track target node
     if (!nodeMap.has(target)) {
-      nodeMap.set(target, { selectionIds: [] });
+      nodeMap.set(target, { selectionIds: [], highlightValue: 0 });
     }
     nodeMap.get(target)!.selectionIds.push(selectionId);
+    nodeMap.get(target)!.highlightValue += highlightValue;
 
     // Track link with selection IDs
     const key = `${source}\0${target}`;
@@ -836,8 +856,9 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
     if (existing) {
       existing.value += value;
       existing.selectionIds?.push(selectionId);
+      existing.highlightValue = (existing.highlightValue ?? 0) + highlightValue;
     } else {
-      linkMap.set(key, { source, target, value, selectionIds: [selectionId] });
+      linkMap.set(key, { source, target, value, selectionIds: [selectionId], highlightValue });
     }
   }
 
@@ -857,7 +878,6 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
     }
   }
 
-  // Create nodes with first selection ID (for cross-filtering by node)
   const nodes: SankeyNodeDatum[] = Array.from(nodeMap.entries()).map(([id, data]) => ({
     id,
     name: id,
@@ -865,12 +885,16 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
     color: colorMode === 'single' || colorMode === 'layer'
       ? defaultColor
       : userColorMap.get(id) ?? host.colorPalette.getColor(id).value,
-    selectionId: data.selectionIds[0], // Use first selectionId for the node
+    selectionIds: dedupeSelectionIds(data.selectionIds),
+    highlightValue: data.highlightValue,
   }));
 
   return {
     nodes,
-    links: Array.from(linkMap.values()),
+    links: Array.from(linkMap.values()).map(link => ({
+      ...link,
+      selectionIds: dedupeSelectionIds(link.selectionIds ?? []),
+    })),
     valueMeasureName: valueColumn?.source.displayName ?? 'Value',
   };
 }
@@ -916,6 +940,8 @@ export class Visual implements IVisual {
 
   // Interaction state
   private allowInteractions: boolean = true;
+  private currentSelectedIds: ISelectionId[] = [];
+  private hasHighlights: boolean = false;
   private readonly instanceId: string;
   private readonly abortController = new AbortController();
 
@@ -1020,8 +1046,9 @@ export class Visual implements IVisual {
           // Select focused node (only if interactions allowed)
           if (this.allowInteractions && this.focusedNodeIndex >= 0 && this.focusedNodeIndex < this.currentNodes.length) {
             const node = this.currentNodes[this.focusedNodeIndex];
-            if (node.selectionId) {
-              this.selectionManager.select(node.selectionId, event.ctrlKey || event.metaKey);
+            const selectionIds = node.selectionIds ?? [];
+            if (selectionIds.length > 0) {
+              this.selectionManager.select(selectionIds, event.ctrlKey || event.metaKey);
             }
           }
           event.preventDefault();
@@ -1124,6 +1151,7 @@ export class Visual implements IVisual {
    * Update visual state based on current selection
    */
   private updateSelectionState(selectedIds: ISelectionId[]): void {
+    this.currentSelectedIds = selectedIds;
     const hasSelection = selectedIds.length > 0;
     const { linkOpacity } = this.settings;
 
@@ -1131,36 +1159,62 @@ export class Visual implements IVisual {
     const selectedKeySet = new Set(selectedIds.map(id => this.getSelectionKey(id)));
 
     const isSelected = (id: ISelectionId): boolean => selectedKeySet.has(this.getSelectionKey(id));
+    const isNodeSelected = (node: ComputedNode): boolean =>
+      (node.selectionIds ?? []).some(id => isSelected(id));
+    const isLinkSelected = (link: ComputedLink): boolean =>
+      (linkDatum(link).selectionIds ?? []).some(id => isSelected(id));
+    const hasNodeHighlight = (node: ComputedNode): boolean =>
+      (node.highlightValue ?? 0) > 0;
+    const hasLinkHighlight = (link: ComputedLink): boolean =>
+      (linkDatum(link).highlightValue ?? 0) > 0;
 
     // Update node opacity based on selection
     this.svg.selectAll('.nodes g rect')
       .style('opacity', (d: unknown) => {
-        if (!hasSelection) return SELECTED_OPACITY;
         const node = d as ComputedNode;
-        return node.selectionId && isSelected(node.selectionId) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
+        if (hasSelection) {
+          return isNodeSelected(node) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
+        }
+        if (this.hasHighlights) {
+          return hasNodeHighlight(node) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
+        }
+        return SELECTED_OPACITY;
       });
 
     // Update link opacity based on selection
     this.svg.selectAll('.links path')
       .style('opacity', (d: unknown) => {
-        if (!hasSelection) return SELECTED_OPACITY;
         const link = d as ComputedLink;
-        const linkSelectionIds = linkDatum(link).selectionIds ?? [];
-        return linkSelectionIds.some(lid => isSelected(lid)) ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY;
+        if (hasSelection) {
+          return isLinkSelected(link) ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY;
+        }
+        if (this.hasHighlights) {
+          return hasLinkHighlight(link) ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY;
+        }
+        return SELECTED_OPACITY;
       })
       .attr('stroke-opacity', (d: unknown) => {
-        if (!hasSelection) return this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : linkOpacity;
         const link = d as ComputedLink;
-        const linkSelectionIds = linkDatum(link).selectionIds ?? [];
-        return linkSelectionIds.some(lid => isSelected(lid)) ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY;
+        if (hasSelection) {
+          return isLinkSelected(link) ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY;
+        }
+        if (this.hasHighlights) {
+          return hasLinkHighlight(link) ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY;
+        }
+        return this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : linkOpacity;
       });
 
     // Update label opacity
     this.svg.selectAll('.nodes g text')
       .style('opacity', (d: unknown) => {
-        if (!hasSelection) return SELECTED_OPACITY;
         const node = d as ComputedNode;
-        return node.selectionId && isSelected(node.selectionId) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
+        if (hasSelection) {
+          return isNodeSelected(node) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
+        }
+        if (this.hasHighlights) {
+          return hasNodeHighlight(node) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
+        }
+        return SELECTED_OPACITY;
       });
   }
 
@@ -1210,38 +1264,6 @@ export class Visual implements IVisual {
     const findCard = (uid: string, displayName: string) =>
       formattingCards.find(c => c.uid === uid)
       ?? formattingCards.find(c => c.displayName === displayName);
-
-    // In category mode, add per-node color pickers into Nodes card
-    if (this.settings.nodeColorMode === 'category' && this.currentNodes.length > 0) {
-      // Filter out duplicate nodes created by cycle resolution
-      const uniqueNodes = this.currentNodes.filter(n => !n.originalId);
-      const nodeColorSlices = uniqueNodes.map(node => ({
-        uid: `nodeColors_fill_${node.id}`,
-        displayName: node.name,
-        control: {
-          type: powerbi.visuals.FormattingComponent.ColorPicker,
-          properties: {
-            descriptor: {
-              objectName: 'nodeColors',
-              propertyName: 'fill',
-              selector: node.selectionId
-                ? (node.selectionId as powerbi.visuals.ISelectionId).getSelector()
-                : null,
-            },
-            value: { value: node.color ?? this.host.colorPalette.getColor(node.id).value },
-          },
-        },
-      })) as unknown as powerbi.visuals.FormattingSlice[];
-
-      const nodesCard = findCard('nodeSettings_card', 'Nodes');
-      if (nodesCard) {
-        nodesCard.groups.push({
-          uid: 'nodeColorsGroup',
-          displayName: 'Node Colors',
-          slices: nodeColorSlices,
-        });
-      }
-    }
 
     // Helper to build per-layer color picker slices and append as a group to a parent card
     // Cast required: Power BI FormattingSlice type doesn't expose the control shape we build dynamically
@@ -1408,6 +1430,7 @@ export class Visual implements IVisual {
         this.currentLayerDepths = [];
         this.currentNodeLayerDepths = [];
         this.currentLabelLayerDepths = [];
+        this.hasHighlights = false;
         this.focusedNodeIndex = -1;
         this.svg.attr('aria-label', 'Sankey Chart: No data');
         this.showLandingPage(viewport);
@@ -1420,7 +1443,9 @@ export class Visual implements IVisual {
       this.target.style.pointerEvents = '';
       this.target.setAttribute('tabindex', '0');
       this.valueMeasureName = data.valueMeasureName;
+      this.hasHighlights = data.links.some(link => (link.highlightValue ?? 0) > 0);
       this.renderSankey(data, viewport);
+      this.updateSelectionState(this.selectionManager.getSelectionIds());
 
       // Signal rendering finished
       this.eventService.renderingFinished(options);
@@ -1652,8 +1677,8 @@ export class Visual implements IVisual {
           isTouchEvent: false,
         });
       })
-      .on('mouseout', (event: MouseEvent) => {
-        select(event.currentTarget as SVGPathElement).attr('stroke-opacity', this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : linkOpacity);
+      .on('mouseout', () => {
+        this.updateSelectionState(this.currentSelectedIds);
         tooltipService.hide({ immediately: true, isTouchEvent: false });
       });
 
@@ -1756,17 +1781,19 @@ export class Visual implements IVisual {
       .on('click', (event: MouseEvent, d: ComputedNode) => {
         // Handle click selection for nodes (only if interactions allowed)
         if (!this.allowInteractions) return;
-        if (d.selectionId) {
-          selectionManager.select(d.selectionId, event.ctrlKey || event.metaKey);
+        const selectionIds = d.selectionIds ?? [];
+        if (selectionIds.length > 0) {
+          selectionManager.select(selectionIds, event.ctrlKey || event.metaKey);
         }
         event.stopPropagation();
       })
       .on('contextmenu', (event: MouseEvent, d: ComputedNode) => {
         // Show context menu for nodes (only if interactions allowed)
         if (!this.allowInteractions) return;
-        if (d.selectionId) {
+        const selectionIds = d.selectionIds ?? [];
+        if (selectionIds.length > 0) {
           selectionManager.showContextMenu(
-            d.selectionId,
+            selectionIds[0],
             { x: event.clientX, y: event.clientY }
           );
         }
