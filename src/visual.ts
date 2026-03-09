@@ -112,6 +112,11 @@ export const DEFAULT_LAYER_PALETTE = [
 ];
 export const VALID_DATA_LABEL_DISPLAY_MODES: DataLabelDisplayMode[] = ['value', 'percentage', 'both'];
 
+/** Extract a stable string key from a Power BI selection ID for deduplication/comparison */
+export function getSelectionKey(id: ISelectionId): string {
+  return (id as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(id);
+}
+
 export interface VisualSettings {
   nodeWidth: number;
   nodePadding: number;
@@ -770,6 +775,8 @@ export function resolveCycles(
         ...originalNode,
         id: dupeId,
         originalId: originalNode.originalId ?? targetId,
+        // Deep-copy arrays to avoid shared references with the original node
+        selectionIds: originalNode.selectionIds ? [...originalNode.selectionIds] : undefined,
       });
       feedbackLink.target = dupeId;
       // Assign a position to the new node so further iterations work
@@ -802,9 +809,6 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
     return null;
   }
 
-  const getSelectionKey = (id: ISelectionId): string =>
-    (id as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(id);
-
   const dedupeSelectionIds = (ids: ISelectionId[]): ISelectionId[] => {
     const unique = new Map<string, ISelectionId>();
     for (const id of ids) {
@@ -826,29 +830,31 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
       continue;
     }
 
-    // Create selection ID for this row
+    // Create selection ID for this row (use sourceColumn only — chaining
+    // multiple withCategory calls may cause the later call to overwrite the
+    // earlier one in the Power BI runtime)
     const selectionId = host.createSelectionIdBuilder()
       .withCategory(sourceColumn, i)
-      .withCategory(targetColumn, i)
       .createSelectionId();
     const rawHighlight = valueColumn?.highlights?.[i];
     const highlightValue = typeof rawHighlight === 'number' && Number.isFinite(rawHighlight) && rawHighlight > 0
       ? rawHighlight
       : 0;
 
-    // Track source node
+    // Track source node (use max to avoid double-counting when a node
+    // appears as both source and target across different rows)
     if (!nodeMap.has(source)) {
       nodeMap.set(source, { selectionIds: [], highlightValue: 0 });
     }
     nodeMap.get(source)!.selectionIds.push(selectionId);
-    nodeMap.get(source)!.highlightValue += highlightValue;
+    nodeMap.get(source)!.highlightValue = Math.max(nodeMap.get(source)!.highlightValue, highlightValue);
 
     // Track target node
     if (!nodeMap.has(target)) {
       nodeMap.set(target, { selectionIds: [], highlightValue: 0 });
     }
     nodeMap.get(target)!.selectionIds.push(selectionId);
-    nodeMap.get(target)!.highlightValue += highlightValue;
+    nodeMap.get(target)!.highlightValue = Math.max(nodeMap.get(target)!.highlightValue, highlightValue);
 
     // Track link with selection IDs
     const key = `${source}\0${target}`;
@@ -1144,7 +1150,23 @@ export class Visual implements IVisual {
   }
 
   private getSelectionKey(id: ISelectionId): string {
-    return (id as powerbi.visuals.ISelectionId).getKey?.() ?? JSON.stringify(id);
+    return getSelectionKey(id);
+  }
+
+  /** Compute the correct stroke-opacity for a single link given current state */
+  private computeLinkStrokeOpacity(link: ComputedLink): number {
+    const { linkOpacity } = this.settings;
+    if (this.currentSelectedIds.length > 0) {
+      const selectedKeySet = new Set(this.currentSelectedIds.map(id => this.getSelectionKey(id)));
+      const selected = (linkDatum(link).selectionIds ?? []).some(
+        id => selectedKeySet.has(this.getSelectionKey(id)),
+      );
+      return selected ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY;
+    }
+    if (this.hasHighlights) {
+      return (linkDatum(link).highlightValue ?? 0) > 0 ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY;
+    }
+    return this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : linkOpacity;
   }
 
   /**
@@ -1264,6 +1286,41 @@ export class Visual implements IVisual {
     const findCard = (uid: string, displayName: string) =>
       formattingCards.find(c => c.uid === uid)
       ?? formattingCards.find(c => c.displayName === displayName);
+
+    // In category mode, add per-node color pickers into Nodes card
+    if (this.settings.nodeColorMode === 'category' && this.currentNodes.length > 0) {
+      // Filter out duplicate nodes created by cycle resolution
+      const uniqueNodes = this.currentNodes.filter(n => !n.originalId);
+      const nodeColorSlices = uniqueNodes.map(node => {
+        const firstId = (node.selectionIds ?? [])[0];
+        return {
+          uid: `nodeColors_fill_${node.id}`,
+          displayName: node.name,
+          control: {
+            type: powerbi.visuals.FormattingComponent.ColorPicker,
+            properties: {
+              descriptor: {
+                objectName: 'nodeColors',
+                propertyName: 'fill',
+                selector: firstId
+                  ? (firstId as powerbi.visuals.ISelectionId).getSelector()
+                  : null,
+              },
+              value: { value: node.color ?? this.host.colorPalette.getColor(node.id).value },
+            },
+          },
+        };
+      }) as unknown as powerbi.visuals.FormattingSlice[];
+
+      const nodesCard = findCard('nodeSettings_card', 'Nodes');
+      if (nodesCard) {
+        nodesCard.groups.push({
+          uid: 'nodeColorsGroup',
+          displayName: 'Node Colors',
+          slices: nodeColorSlices,
+        });
+      }
+    }
 
     // Helper to build per-layer color picker slices and append as a group to a parent card
     // Cast required: Power BI FormattingSlice type doesn't expose the control shape we build dynamically
@@ -1647,6 +1704,7 @@ export class Visual implements IVisual {
         const linkData = linkDatum(d);
         const selectionIds = linkData.selectionIds ?? [];
         if (selectionIds.length > 0) {
+          // showContextMenu accepts a single ISelectionId only
           selectionManager.showContextMenu(
             selectionIds[0],
             { x: event.clientX, y: event.clientY }
@@ -1677,8 +1735,11 @@ export class Visual implements IVisual {
           isTouchEvent: false,
         });
       })
-      .on('mouseout', () => {
-        this.updateSelectionState(this.currentSelectedIds);
+      .on('mouseout', (event: MouseEvent, d: ComputedLink) => {
+        // Restore only the hovered link's stroke-opacity instead of
+        // recalculating all elements for better performance
+        select(event.currentTarget as SVGPathElement)
+          .attr('stroke-opacity', this.computeLinkStrokeOpacity(d));
         tooltipService.hide({ immediately: true, isTouchEvent: false });
       });
 
@@ -1792,6 +1853,8 @@ export class Visual implements IVisual {
         if (!this.allowInteractions) return;
         const selectionIds = d.selectionIds ?? [];
         if (selectionIds.length > 0) {
+          // showContextMenu accepts a single ISelectionId; use the first one.
+          // This means drill-down targets the first associated row only.
           selectionManager.showContextMenu(
             selectionIds[0],
             { x: event.clientX, y: event.clientY }
