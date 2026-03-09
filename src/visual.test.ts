@@ -507,12 +507,15 @@ describe('getSelectionKey', () => {
 
 describe('transformDataView', () => {
   // Minimal mock for IVisualHost
+  // Mock mirrors real Power BI behavior: withCategory produces an ID
+  // based on the column identity + row index, not just the cell value.
   const mockHost = {
     createSelectionIdBuilder: () => {
       const parts: string[] = [];
       return {
         withCategory(categoryColumn: { values?: unknown[] }, index: number) {
-          parts.push(String(categoryColumn.values?.[index] ?? ''));
+          const value = String(categoryColumn.values?.[index] ?? '');
+          parts.push(`${value}@${index}`);
           return this;
         },
         createSelectionId: () => {
@@ -718,8 +721,8 @@ describe('transformDataView', () => {
       host: mockHost,
     });
     const nodeA = result!.nodes.find(n => n.id === 'A');
-    // Both rows have source 'A', but after dedup only one unique key remains
-    expect(nodeA!.selectionIds?.map(id => id.getKey())).toEqual(['A']);
+    // Row 0 and row 1 both have source 'A' but different row indices → 2 distinct IDs
+    expect(nodeA!.selectionIds?.map(id => id.getKey())).toEqual(['A@0', 'A@1']);
   });
 
   it('collects selectionIds for target-only nodes from their associated rows', () => {
@@ -728,8 +731,8 @@ describe('transformDataView', () => {
       host: mockHost,
     });
     const nodeB = result!.nodes.find(n => n.id === 'B');
-    // Node B is target in both rows; selectionIds come from source column: 'A' and 'C'
-    expect(nodeB!.selectionIds?.map(id => id.getKey())).toEqual(['A', 'C']);
+    // Node B is target in both rows; selectionIds come from source column rows
+    expect(nodeB!.selectionIds?.map(id => id.getKey())).toEqual(['A@0', 'C@1']);
   });
 
   it('captures highlight values on links and nodes', () => {
@@ -971,6 +974,42 @@ describe('resolveCycles', () => {
     resolveCycles(nodes, links);
     expect(nodes).toEqual(origNodes);
     expect(links).toEqual(origLinks);
+  });
+
+  it('deep-copies selectionIds on duplicate nodes so arrays are independent', () => {
+    const selId = { getKey: () => 'sel-1' } as unknown as import('powerbi-visuals-api').extensibility.ISelectionId;
+    const nodes: SankeyNodeDatum[] = [
+      { id: 'A', name: 'A', selectionIds: [selId] },
+      { id: 'B', name: 'B' },
+    ];
+    const links = [link('A', 'B', 10), link('B', 'A', 3)];
+    const result = resolveCycles(nodes, links);
+    const dupeNode = result.nodes.find(n => n.originalId === 'A');
+    expect(dupeNode).toBeDefined();
+    // Array is a separate reference but contains the same IDs
+    expect(dupeNode!.selectionIds).not.toBe(nodes[0].selectionIds);
+    expect(dupeNode!.selectionIds).toEqual([selId]);
+  });
+
+  it('deep-copies selectionIds on links so arrays are independent', () => {
+    const selId = { getKey: () => 'sel-2' } as unknown as import('powerbi-visuals-api').extensibility.ISelectionId;
+    const nodes: SankeyNodeDatum[] = [
+      { id: 'A', name: 'A' },
+      { id: 'B', name: 'B' },
+    ];
+    const links: SankeyLinkDatum[] = [
+      { source: 'A', target: 'B', value: 10, selectionIds: [selId] },
+      { source: 'B', target: 'A', value: 3, selectionIds: [selId] },
+    ];
+    const result = resolveCycles(nodes, links);
+    // Verify result links don't share selectionIds arrays with input
+    for (const rl of result.links) {
+      for (const il of links) {
+        if (rl.selectionIds && il.selectionIds) {
+          expect(rl.selectionIds).not.toBe(il.selectionIds);
+        }
+      }
+    }
   });
 
   it('handles multiple independent 2-node cycles with duplication', () => {

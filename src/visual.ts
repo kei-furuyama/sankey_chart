@@ -756,7 +756,10 @@ export function resolveCycles(
     if (!nodePos.has(link.target)) nodePos.set(link.target, pos++);
   }
 
-  const remaining = links.map(l => ({ ...l }));
+  const remaining = links.map(l => ({
+    ...l,
+    selectionIds: l.selectionIds ? [...l.selectionIds] : undefined,
+  }));
   const newNodes = nodes.map(n => ({ ...n }));
   let dupeCounter = 0;
 
@@ -830,9 +833,10 @@ export function transformDataView(options: TransformDataViewOptions): SankeyData
       continue;
     }
 
-    // Create selection ID for this row (use sourceColumn only — chaining
-    // multiple withCategory calls may cause the later call to overwrite the
-    // earlier one in the Power BI runtime)
+    // Create selection ID for this row using sourceColumn only.
+    // Power BI's withCategory chaining overwrites earlier calls, so we cannot
+    // combine source + target into one ID. This means cross-filtering operates
+    // at source-node granularity (clicking link A->B also highlights A->C).
     const selectionId = host.createSelectionIdBuilder()
       .withCategory(sourceColumn, i)
       .createSelectionId();
@@ -946,7 +950,7 @@ export class Visual implements IVisual {
 
   // Interaction state
   private allowInteractions: boolean = true;
-  private currentSelectedIds: ISelectionId[] = [];
+  private cachedSelectedKeySet: Set<string> = new Set();
   private hasHighlights: boolean = false;
   private readonly instanceId: string;
   private readonly abortController = new AbortController();
@@ -1153,13 +1157,14 @@ export class Visual implements IVisual {
     return getSelectionKey(id);
   }
 
-  /** Compute the correct stroke-opacity for a single link given current state */
+  /** Compute the correct stroke-opacity for a single link given current state.
+   *  This is the single source of truth for link stroke-opacity — used by both
+   *  updateSelectionState (bulk) and mouseout (single element). */
   private computeLinkStrokeOpacity(link: ComputedLink): number {
     const { linkOpacity } = this.settings;
-    if (this.currentSelectedIds.length > 0) {
-      const selectedKeySet = new Set(this.currentSelectedIds.map(id => this.getSelectionKey(id)));
+    if (this.cachedSelectedKeySet.size > 0) {
       const selected = (linkDatum(link).selectionIds ?? []).some(
-        id => selectedKeySet.has(this.getSelectionKey(id)),
+        id => this.cachedSelectedKeySet.has(this.getSelectionKey(id)),
       );
       return selected ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY;
     }
@@ -1169,75 +1174,57 @@ export class Visual implements IVisual {
     return this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : linkOpacity;
   }
 
+  /** Compute the correct style opacity for a single link given current state */
+  private computeLinkOpacity(link: ComputedLink): number {
+    if (this.cachedSelectedKeySet.size > 0) {
+      const selected = (linkDatum(link).selectionIds ?? []).some(
+        id => this.cachedSelectedKeySet.has(this.getSelectionKey(id)),
+      );
+      return selected ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY;
+    }
+    if (this.hasHighlights) {
+      return (linkDatum(link).highlightValue ?? 0) > 0 ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY;
+    }
+    return SELECTED_OPACITY;
+  }
+
   /**
    * Update visual state based on current selection
    */
   private updateSelectionState(selectedIds: ISelectionId[]): void {
-    this.currentSelectedIds = selectedIds;
-    const hasSelection = selectedIds.length > 0;
-    const { linkOpacity } = this.settings;
+    // Cache the key set so computeLinkStrokeOpacity/computeLinkOpacity
+    // can use it without rebuilding on every mouseout event
+    this.cachedSelectedKeySet = new Set(selectedIds.map(id => this.getSelectionKey(id)));
 
-    // Pre-build Set for O(1) lookup instead of O(n) per check
-    const selectedKeySet = new Set(selectedIds.map(id => this.getSelectionKey(id)));
+    const hasSelection = this.cachedSelectedKeySet.size > 0;
 
-    const isSelected = (id: ISelectionId): boolean => selectedKeySet.has(this.getSelectionKey(id));
     const isNodeSelected = (node: ComputedNode): boolean =>
-      (node.selectionIds ?? []).some(id => isSelected(id));
-    const isLinkSelected = (link: ComputedLink): boolean =>
-      (linkDatum(link).selectionIds ?? []).some(id => isSelected(id));
+      (node.selectionIds ?? []).some(id => this.cachedSelectedKeySet.has(this.getSelectionKey(id)));
     const hasNodeHighlight = (node: ComputedNode): boolean =>
       (node.highlightValue ?? 0) > 0;
-    const hasLinkHighlight = (link: ComputedLink): boolean =>
-      (linkDatum(link).highlightValue ?? 0) > 0;
+
+    const computeNodeOpacity = (node: ComputedNode): number => {
+      if (hasSelection) {
+        return isNodeSelected(node) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
+      }
+      if (this.hasHighlights) {
+        return hasNodeHighlight(node) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
+      }
+      return SELECTED_OPACITY;
+    };
 
     // Update node opacity based on selection
     this.svg.selectAll('.nodes g rect')
-      .style('opacity', (d: unknown) => {
-        const node = d as ComputedNode;
-        if (hasSelection) {
-          return isNodeSelected(node) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
-        }
-        if (this.hasHighlights) {
-          return hasNodeHighlight(node) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
-        }
-        return SELECTED_OPACITY;
-      });
+      .style('opacity', (d: unknown) => computeNodeOpacity(d as ComputedNode));
 
-    // Update link opacity based on selection
+    // Update link opacity + stroke-opacity using single-source-of-truth helpers
     this.svg.selectAll('.links path')
-      .style('opacity', (d: unknown) => {
-        const link = d as ComputedLink;
-        if (hasSelection) {
-          return isLinkSelected(link) ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY;
-        }
-        if (this.hasHighlights) {
-          return hasLinkHighlight(link) ? SELECTED_OPACITY : UNSELECTED_LINK_OPACITY;
-        }
-        return SELECTED_OPACITY;
-      })
-      .attr('stroke-opacity', (d: unknown) => {
-        const link = d as ComputedLink;
-        if (hasSelection) {
-          return isLinkSelected(link) ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY;
-        }
-        if (this.hasHighlights) {
-          return hasLinkHighlight(link) ? HIGHLIGHTED_LINK_OPACITY : UNSELECTED_LINK_OPACITY;
-        }
-        return this.isHighContrastMode ? HIGHLIGHTED_LINK_OPACITY : linkOpacity;
-      });
+      .style('opacity', (d: unknown) => this.computeLinkOpacity(d as ComputedLink))
+      .attr('stroke-opacity', (d: unknown) => this.computeLinkStrokeOpacity(d as ComputedLink));
 
     // Update label opacity
     this.svg.selectAll('.nodes g text')
-      .style('opacity', (d: unknown) => {
-        const node = d as ComputedNode;
-        if (hasSelection) {
-          return isNodeSelected(node) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
-        }
-        if (this.hasHighlights) {
-          return hasNodeHighlight(node) ? SELECTED_OPACITY : UNSELECTED_NODE_OPACITY;
-        }
-        return SELECTED_OPACITY;
-      });
+      .style('opacity', (d: unknown) => computeNodeOpacity(d as ComputedNode));
   }
 
   /**
@@ -1714,7 +1701,9 @@ export class Visual implements IVisual {
         event.stopPropagation();
       })
       .on('mouseover', (event: MouseEvent, d: ComputedLink) => {
-        select(event.currentTarget as SVGPathElement).attr('stroke-opacity', HIGHLIGHTED_LINK_OPACITY);
+        const el = select(event.currentTarget as SVGPathElement);
+        el.attr('stroke-opacity', HIGHLIGHTED_LINK_OPACITY)
+          .style('opacity', SELECTED_OPACITY);
         const sourceName = resolveNode(d.source).name;
         const targetName = resolveNode(d.target).name;
         const tooltipData: VisualTooltipDataItem[] = [
@@ -1736,10 +1725,11 @@ export class Visual implements IVisual {
         });
       })
       .on('mouseout', (event: MouseEvent, d: ComputedLink) => {
-        // Restore only the hovered link's stroke-opacity instead of
+        // Restore only the hovered link's opacity instead of
         // recalculating all elements for better performance
         select(event.currentTarget as SVGPathElement)
-          .attr('stroke-opacity', this.computeLinkStrokeOpacity(d));
+          .attr('stroke-opacity', this.computeLinkStrokeOpacity(d))
+          .style('opacity', this.computeLinkOpacity(d));
         tooltipService.hide({ immediately: true, isTouchEvent: false });
       });
 
